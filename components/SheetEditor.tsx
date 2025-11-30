@@ -16,6 +16,13 @@ const SheetEditor = () => {
 
   useEffect(() => {
     setData(getSheetData());
+    
+    // Check for persistent session
+    const savedUser = sessionStorage.getItem('app_sheet_user');
+    if (savedUser) {
+        setLoginUser(savedUser);
+        setIsAuthenticated(true);
+    }
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -28,9 +35,17 @@ const SheetEditor = () => {
     if (targetUser && targetUser.senha === loginPass) {
         setIsAuthenticated(true);
         setLoginError('');
+        sessionStorage.setItem('app_sheet_user', loginUser); // Persist session
     } else {
         setLoginError('Senha incorreta para este usuário.');
     }
+  };
+
+  const handleLogout = () => {
+      setIsAuthenticated(false);
+      setLoginUser('');
+      setLoginPass('');
+      sessionStorage.removeItem('app_sheet_user');
   };
 
   const handleTechChange = (index: number, field: keyof Tecnico, value: string | number) => {
@@ -263,6 +278,14 @@ const SheetEditor = () => {
         </div>
         <div className="flex items-center gap-4">
              <span className="text-xs font-medium text-slate-400">Logado: <span className="text-slate-700 font-bold">{loginUser}</span> {isAdmin && <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] uppercase ml-1">Admin</span>}</span>
+            <button 
+                onClick={handleLogout}
+                className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-lg transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider"
+                title="Bloquear Acesso"
+            >
+                <LockIcon className="w-4 h-4" />
+                Bloquear
+            </button>
             <button 
                 onClick={handleSave}
                 className="bg-indigo-600 text-white px-5 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition shadow-md shadow-indigo-100 flex items-center gap-2"
