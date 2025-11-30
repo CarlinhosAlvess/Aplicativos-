@@ -1,0 +1,5 @@
+{
+  "name": "Agendamento Técnico Inteligente",
+  "description": "Sistema de agendamento de visitas técnicas com gestão de capacidade simulando Google Sheets e confirmação via IA.",
+  "requestFramePermissions": []
+}
