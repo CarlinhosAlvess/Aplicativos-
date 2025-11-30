@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { getSheetData, getUniqueCities } from '../services/mockSheetService';
 import { DatabaseSchema, StatusExecucao } from '../types';
-import { ChartIcon, TableIcon, AlertIcon } from './Icons';
+import { ChartIcon, AlertIcon, SparklesIcon } from './Icons';
 
 // --- Componentes Visuais Auxiliares (Gráficos CSS/SVG) ---
 
@@ -17,47 +17,6 @@ const ProgressBar = ({ value, color = "bg-blue-600", label, showValue = true }: 
     </div>
   </div>
 );
-
-const DonutChart = ({ data }: { data: { label: string, value: number, color: string }[] }) => {
-  const total = data.reduce((acc, curr) => acc + curr.value, 0);
-  let accumulated = 0;
-
-  if (total === 0) return <div className="text-center text-gray-400 text-sm py-10 flex flex-col items-center justify-center h-40"><span>Sem dados</span></div>;
-
-  return (
-    <div className="relative w-40 h-40 mx-auto">
-      <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
-        {data.map((item, index) => {
-          const percent = (item.value / total) * 100;
-          const strokeDasharray = `${percent} 100`;
-          const strokeDashoffset = -accumulated;
-          accumulated += percent;
-
-          return (
-            <circle
-              key={index}
-              cx="50"
-              cy="50"
-              r="40"
-              fill="transparent"
-              stroke={item.color}
-              strokeWidth="20"
-              strokeDasharray={strokeDasharray}
-              strokeDashoffset={strokeDashoffset}
-              className="transition-all duration-1000 hover:opacity-80"
-            >
-              <title>{item.label}: {item.value} ({Math.round(percent)}%)</title>
-            </circle>
-          );
-        })}
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
-        <span className="text-2xl font-bold text-gray-800">{total}</span>
-        <span className="text-xs text-gray-500">Total</span>
-      </div>
-    </div>
-  );
-};
 
 // Componente de Insight/Alerta
 const InsightCard = ({ type, title, message }: { type: 'danger' | 'warning' | 'success' | 'info', title: string, message: string }) => {
@@ -91,6 +50,14 @@ interface CityStats {
     tecnicos: number;
     agendamentos: number;
     capacidadeDiaria: number;
+}
+
+interface Opportunity {
+    area: string;
+    problema: string;
+    acao: string;
+    prioridade: 'Alta' | 'Média' | 'Baixa';
+    impacto: string;
 }
 
 const Dashboard = () => {
@@ -150,13 +117,12 @@ const Dashboard = () => {
     });
 
     // Calcula capacidade técnica por cidade
-    // Se um técnico atende SP e Rio, sua capacidade conta para ambos (no sentido de oferta potencial)
     data.tecnicos.forEach(tech => {
         if (tech.cidades && Array.isArray(tech.cidades)) {
             tech.cidades.forEach(c => {
                 if (cidadesStats[c]) {
                     cidadesStats[c].tecnicos += 1;
-                    cidadesStats[c].capacidadeDiaria += (tech.capacidadeManha + tech.capacidadeTarde + (tech.capacidadeNoite || 0));
+                    cidadesStats[c].capacidadeDiaria += (Number(tech.capacidadeManha) + Number(tech.capacidadeTarde) + (Number(tech.capacidadeNoite) || 0));
                 }
             });
         }
@@ -167,7 +133,6 @@ const Dashboard = () => {
         if (cidadesStats[ag.cidade]) {
             cidadesStats[ag.cidade].agendamentos += 1;
         } else if (!cidadesStats[ag.cidade]) {
-            // Caso tenha agendamento em cidade antiga ou removida, cria entrada
             cidadesStats[ag.cidade] = {
                 nome: ag.cidade,
                 tecnicos: 0,
@@ -177,50 +142,42 @@ const Dashboard = () => {
         }
     });
     
-    const listaCidades = (Object.values(cidadesStats) as CityStats[]).sort((a, b) => {
+    const listaCidades = (Object.values(cidadesStats) as CityStats[]).sort((a: CityStats, b: CityStats) => {
         const satA = a.agendamentos / (a.capacidadeDiaria || 1);
         const satB = b.agendamentos / (b.capacidadeDiaria || 1);
         return satB - satA;
     });
 
-    // --- ANÁLISE DE MELHORIAS (Motivos de Falha) ---
+    // --- ANÁLISE DE MOTIVOS (Pareto) & NORMALIZAÇÃO ---
+    // Corrige problema de duplicação (ex: "ausente" vs "Ausente")
     const incidentesDetalhados = filteredAgendamentos.filter(a => a.statusExecucao === 'Não Finalizado');
 
-    const motivosStats = incidentesDetalhados
-        .reduce((acc, curr) => {
-            const motivo = curr.motivoNaoConclusao || 'Outros';
-            acc[motivo] = (acc[motivo] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
-    
-    // Explicitly casting Object.entries result to handle potential inference issues
-    const chartMotivos = (Object.entries(motivosStats) as [string, number][])
-        .sort((a, b) => b[1] - a[1])
-        .map(([motivo, qtd]) => ({ motivo, qtd }));
-
-    // --- ANÁLISE DE ATIVIDADES ---
-    const atividadesStats = filteredAgendamentos.reduce((acc, curr) => {
-        const ativ = curr.atividade || 'Não especificado';
-        acc[ativ] = (acc[ativ] || 0) + 1;
+    const motivosStats = incidentesDetalhados.reduce<Record<string, number>>((acc, curr) => {
+        const raw = curr.motivoNaoConclusao || 'Outros';
+        // Normaliza: remove espaços nas pontas e coloca tudo minúsculo para agrupar
+        const normalizedKey = raw.trim().toLowerCase();
+        acc[normalizedKey] = (acc[normalizedKey] || 0) + 1;
         return acc;
-    }, {} as Record<string, number>);
+    }, {});
+    
+    // Converte de volta para array e capitaliza para exibição
+    const chartMotivos = Object.entries(motivosStats)
+        .sort((a, b) => b[1] - a[1])
+        .map(([key, qtd]) => ({ 
+            motivo: key.charAt(0).toUpperCase() + key.slice(1), // Capitaliza primeira letra
+            qtd 
+        }));
 
-    const chartAtividades = Object.entries(atividadesStats).map(([label, value], idx) => ({
-        label,
-        value,
-        color: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'][idx % 5]
-    }));
-
-    // --- GERADOR DE INSIGHTS (IA Rules Based) ---
+    // --- GERADOR DE INSIGHTS AUTOMÁTICOS ---
     const insights = [];
     
     // Alerta de Capacidade
-    const cidadeSaturada = listaCidades.find(c => (c.agendamentos / c.capacidadeDiaria) > 0.8);
+    const cidadeSaturada = listaCidades.find(c => (c.agendamentos / (c.capacidadeDiaria || 1)) > 0.8);
     if (cidadeSaturada) {
         insights.push({
             type: 'danger' as const,
             title: `GAP Crítico em ${cidadeSaturada.nome}`,
-            message: `A cidade está operando perto da capacidade máxima (${cidadeSaturada.agendamentos}/${cidadeSaturada.capacidadeDiaria}). Considere alocar mais técnicos.`
+            message: `A cidade está operando perto da capacidade máxima (${cidadeSaturada.agendamentos}/${cidadeSaturada.capacidadeDiaria}).`
         });
     } else {
         insights.push({
@@ -230,15 +187,64 @@ const Dashboard = () => {
         });
     }
 
-    // Alerta de Qualidade
-    if (taxaSucesso < 80 && totalFechados > 0) {
-        const principalMotivo = chartMotivos[0]?.motivo || 'diversos';
-        insights.push({
-            type: 'warning' as const,
-            title: 'Alerta de Qualidade',
-            message: `Taxa de sucesso abaixo da meta (80%). Principal ofensor: "${principalMotivo}". Ação sugerida: Reciclagem técnica.`
+    // --- LÓGICA DE GAPS DE MELHORIAS (Diagnóstico & Plano de Ação) ---
+    // Agora usa os dados agrupados (chartMotivos) para ser mais preciso
+    const oportunidadesMelhoria: Opportunity[] = [];
+
+    // Função auxiliar para somar falhas por palavras-chave
+    const countFailuresByKeyword = (keywords: string[]) => {
+        return chartMotivos
+            .filter(m => keywords.some(k => m.motivo.toLowerCase().includes(k)))
+            .reduce((sum, m) => sum + m.qtd, 0);
+    };
+
+    // 1. Melhoria de Logística
+    const qtdLogistica = countFailuresByKeyword(['equipamento', 'material', 'peça', 'estoque', 'ferramenta']);
+    if (qtdLogistica > 0) {
+        oportunidadesMelhoria.push({
+            area: 'Logística / Estoque',
+            problema: `${qtdLogistica} visitas perdidas por falta de material/equipamento.`,
+            acao: 'Revisar kit básico dos veículos e alinhar estoque com a demanda prevista.',
+            prioridade: 'Alta',
+            impacto: 'Redução imediata de reagendamentos e custos de deslocamento.'
         });
     }
+
+    // 2. Melhoria de Acesso/Cliente
+    const qtdAcesso = countFailuresByKeyword(['ausente', 'fechado', 'não atende', 'endereço', 'local']);
+    if (qtdAcesso > 0) {
+        oportunidadesMelhoria.push({
+            area: 'Comunicação / CX',
+            problema: `${qtdAcesso} visitas perdidas por problemas de acesso/cliente.`,
+            acao: 'Implementar confirmação via WhatsApp 1h antes da visita.',
+            prioridade: 'Média',
+            impacto: 'Otimização do deslocamento técnico e aumento de produtividade.'
+        });
+    }
+
+    // 3. Melhoria de Capacidade
+    const cidadesCriticas = listaCidades.filter(c => (c.agendamentos / (c.capacidadeDiaria || 1)) > 0.9);
+    if (cidadesCriticas.length > 0) {
+        oportunidadesMelhoria.push({
+            area: 'Gestão de Força de Trabalho',
+            problema: `Saturação crítica (>90%) em: ${cidadesCriticas.map(c => c.nome).join(', ')}.`,
+            acao: 'Iniciar processo seletivo urgente ou remanejar técnicos de regiões vizinhas.',
+            prioridade: 'Alta',
+            impacto: 'Evitar perda de SLA e recusa de agendamentos.'
+        });
+    }
+
+    // 4. Melhoria Técnica Geral
+    if (taxaSucesso < 85 && totalAgendamentos > 5) {
+        oportunidadesMelhoria.push({
+            area: 'Treinamento Técnico',
+            problema: `Taxa de sucesso global (${taxaSucesso}%) abaixo da meta de 85%.`,
+            acao: 'Realizar reciclagem técnica focada nos principais motivos de falha.',
+            prioridade: 'Média',
+            impacto: 'Melhoria na qualidade percebida e redução de retorno.'
+        });
+    }
+
 
     return (
         <div className="space-y-6 pb-12">
@@ -271,7 +277,7 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* Seção de Insights Automáticos */}
+            {/* Seção de Insights Automáticos (Simples) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {insights.map((insight, idx) => (
                     <InsightCard key={idx} {...insight} />
@@ -305,7 +311,50 @@ const Dashboard = () => {
                 </div>
             </div>
 
-             {/* TABELA DE DETALHAMENTO DE FALHAS (NOVO) */}
+            {/* SEÇÃO NOVA: PLANO DE MELHORIAS (GAPS DE MELHORIA) */}
+            <div className="bg-white rounded-xl shadow-sm border border-indigo-100 overflow-hidden">
+                <div className="bg-indigo-50 px-6 py-4 border-b border-indigo-100">
+                    <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                        <SparklesIcon className="w-5 h-5" />
+                        Diagnóstico e Gaps de Melhoria
+                    </h3>
+                    <p className="text-xs text-indigo-700">Plano de ação estratégico gerado automaticamente baseado nos dados acumulados.</p>
+                </div>
+                
+                {oportunidadesMelhoria.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500 flex flex-col items-center">
+                        <span className="text-2xl mb-2">🏆</span>
+                        <p>Nenhum gap crítico identificado no momento. A operação está eficiente!</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50">
+                        {oportunidadesMelhoria.map((item, idx) => (
+                            <div key={idx} className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex justify-between items-start mb-3">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500 bg-gray-100 px-2 py-1 rounded">{item.area}</span>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-full border ${
+                                        item.prioridade === 'Alta' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                    }`}>
+                                        Prioridade {item.prioridade}
+                                    </span>
+                                </div>
+                                <h4 className="font-bold text-gray-800 mb-2 text-lg">{item.acao}</h4>
+                                <div className="space-y-2">
+                                    <p className="text-sm text-red-600 bg-red-50 p-2 rounded flex items-start gap-2">
+                                        <AlertIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                                        <span><strong>Problema Detectado:</strong> {item.problema}</span>
+                                    </p>
+                                    <p className="text-sm text-green-700 bg-green-50 p-2 rounded">
+                                        <strong>Impacto Esperado:</strong> {item.impacto}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+             {/* TABELA DE DETALHAMENTO DE FALHAS */}
              <div className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden">
                 <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex justify-between items-center">
                     <div>
@@ -322,7 +371,7 @@ const Dashboard = () => {
                 
                 {incidentesDetalhados.length === 0 ? (
                     <div className="p-8 text-center text-gray-500 italic">
-                        Nenhuma incidência registrada para o filtro selecionado. Ótimo trabalho! 👏
+                        Nenhuma incidência registrada para o filtro selecionado.
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -331,8 +380,7 @@ const Dashboard = () => {
                                 <tr>
                                     <th className="px-6 py-3">Data</th>
                                     <th className="px-6 py-3">Cliente</th>
-                                    <th className="px-6 py-3">Técnico Responsável</th>
-                                    <th className="px-6 py-3">Atividade</th>
+                                    <th className="px-6 py-3">Técnico</th>
                                     <th className="px-6 py-3">Motivo da Não Conclusão</th>
                                 </tr>
                             </thead>
@@ -348,9 +396,6 @@ const Dashboard = () => {
                                         </td>
                                         <td className="px-6 py-4 text-blue-600">
                                             {item.tecnicoNome}
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-600">
-                                            {item.atividade}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="bg-red-100 text-red-800 text-xs font-bold px-2.5 py-0.5 rounded border border-red-200">
@@ -370,7 +415,7 @@ const Dashboard = () => {
                 
                 {/* Capacidade vs Demanda (GAPS) */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-lg font-bold text-gray-800 mb-6">Análise de Gaps (Capacidade)</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-6">Saturação de Capacidade (Por Cidade)</h3>
                     <div className="space-y-6">
                         {listaCidades.map((cid, idx) => {
                             const percentualSaturacao = Math.min((cid.agendamentos / (cid.capacidadeDiaria || 1)) * 100, 100);
@@ -399,7 +444,7 @@ const Dashboard = () => {
 
                 {/* Pareto de Falhas */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-lg font-bold text-gray-800 mb-6">Gráfico de Motivos (Pareto)</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-6">Principais Motivos de Falha</h3>
                     {chartMotivos.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-40 bg-gray-50 rounded-lg">
                             <span className="text-gray-400">Sem falhas registradas</span>
