@@ -8,9 +8,8 @@ const BookingForm = () => {
   const [cities, setCities] = useState<string[]>([]);
   const [availableActivities, setAvailableActivities] = useState<string[]>([]);
   const [availableTechs, setAvailableTechs] = useState<TecnicoDisponivel[]>([]);
-  const [allowedUsers, setAllowedUsers] = useState<string[]>([]); // Lista de usuários permitidos
+  const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
   
-  // Form State
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [cidade, setCidade] = useState('');
@@ -20,12 +19,10 @@ const BookingForm = () => {
   const [nomeUsuario, setNomeUsuario] = useState(''); 
   const [tecnicoId, setTecnicoId] = useState('');
   
-  // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [userError, setUserError] = useState<string | null>(null); // Estado para erro de validação de usuário
+  const [userError, setUserError] = useState<string | null>(null);
 
-  // Calcula a data de hoje no formato YYYY-MM-DD para o atributo 'min' do input
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -35,11 +32,10 @@ const BookingForm = () => {
   useEffect(() => {
     setCities(getUniqueCities());
     setAvailableActivities(getAtividades());
-    setAllowedUsers(getUsuarios()); // Carrega usuários da planilha
+    setAllowedUsers(getUsuarios());
   }, []);
 
   useEffect(() => {
-    // Reset selected tech if city/date/period changes
     setTecnicoId('');
     if (cidade && data) {
       const techs = getAvailableTechnicians(cidade, data, periodo);
@@ -49,25 +45,44 @@ const BookingForm = () => {
     }
   }, [cidade, data, periodo]);
 
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, ""); // Remove tudo que não é dígito
+    
+    // Limita a 11 dígitos (DDD + 9 números) para cobrir celular, mas funciona com 10 (DDD + 8)
+    if (value.length > 11) value = value.slice(0, 11);
+
+    // Aplica a máscara
+    if (value.length > 10) {
+        // (XX) XXXXX-XXXX (Celular 9 dígitos)
+        value = value.replace(/^(\d{2})(\d{5})(\d{4}).*/, "($1) $2-$3");
+    } else if (value.length > 6) {
+        // (XX) XXXX-XXXX (Fixo 8 dígitos)
+        value = value.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, "($1) $2-$3");
+    } else if (value.length > 2) {
+        // (XX) XXXX...
+        value = value.replace(/^(\d{2})(\d{0,5}).*/, "($1) $2");
+    } else if (value.length > 0) {
+        // (XX...
+        value = value.replace(/^(\d*)/, "($1");
+    }
+    
+    setTelefone(value);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tecnicoId) return;
 
-    // --- VALIDAÇÃO DE USUÁRIO ---
-    // Verifica se o nome digitado existe na lista de permitidos (Case Insensitive)
     const userExists = allowedUsers.some(u => u.trim().toLowerCase() === nomeUsuario.trim().toLowerCase());
 
     if (!userExists) {
         setUserError('Acesso Negado: Este nome não está cadastrado na aba "Usuários" da planilha.');
         return;
     }
-    // ----------------------------
 
     setIsSubmitting(true);
     
     const selectedTech = availableTechs.find(t => t.id === tecnicoId);
-    
-    // Define o status: Se for 18h (NOITE), considera Encerrado/Fechamento
     const statusAgendamento = periodo === Periodo.NOITE ? 'Encerrado' : 'Confirmado';
 
     const newBooking: Agendamento = {
@@ -81,223 +96,243 @@ const BookingForm = () => {
       tecnicoId,
       tecnicoNome: selectedTech?.nome || 'Desconhecido',
       status: statusAgendamento as 'Confirmado' | 'Encerrado',
-      statusExecucao: 'Pendente', // Inicializa como Pendente
+      statusExecucao: 'Pendente',
       motivoNaoConclusao: '',
-      nomeUsuario: nomeUsuario // Salva o nome do usuário digitado
+      nomeUsuario: nomeUsuario
     };
 
-    // Simulate network delay and save
     setTimeout(async () => {
       addAgendamento(newBooking);
-      
-      // Confirmation message without AI
       const msg = `Agendamento confirmado!\n\nTécnico: ${newBooking.tecnicoNome}\nData: ${newBooking.data.split('-').reverse().join('/')} - ${newBooking.periodo}\nLocal: ${newBooking.cidade}`;
-      
       setSuccessMessage(msg);
       setIsSubmitting(false);
-      
-      // Reset form
       setNome('');
       setTelefone('');
       setTecnicoId('');
       setAtividade('');
-      // Não resetamos o nomeUsuario para facilitar múltiplos agendamentos da mesma pessoa
     }, 800);
   };
 
   const selectedTechData = availableTechs.find(t => t.id === tecnicoId);
 
-  return (
-    <div className="bg-white rounded-2xl shadow-xl overflow-hidden max-w-2xl mx-auto border border-gray-100">
-      <div className="bg-blue-600 p-6 flex items-center gap-3">
-        <CalendarIcon className="text-white w-8 h-8" />
-        <h2 className="text-2xl font-bold text-white">Agendamento de Visitas</h2>
-      </div>
+  // Helper styles
+  const inputClass = "w-full px-4 py-3.5 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all placeholder:text-slate-400 text-slate-700 font-medium";
+  const labelClass = "block text-sm font-semibold text-slate-700 mb-1.5 ml-1";
 
-      <div className="p-8">
+  return (
+    <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden max-w-2xl mx-auto relative">
+      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 to-violet-500"></div>
+
+      <div className="p-10">
         {successMessage ? (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center animate-fade-in">
-            <div className="flex justify-center mb-4">
-               <SparklesIcon className="w-12 h-12 text-green-600" />
+          <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-8 text-center animate-fade-in flex flex-col items-center">
+            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-sm">
+               <SparklesIcon className="w-10 h-10 text-emerald-600" />
             </div>
-            <h3 className="text-xl font-bold text-green-800 mb-2">Agendamento Realizado!</h3>
-            <p className="text-green-700 mb-4 whitespace-pre-line">{successMessage}</p>
+            <h3 className="text-2xl font-bold text-emerald-900 mb-2 tracking-tight">Agendamento Realizado!</h3>
+            <p className="text-emerald-700/80 mb-8 whitespace-pre-line leading-relaxed max-w-sm">{successMessage}</p>
             <button 
               onClick={() => setSuccessMessage(null)}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold"
+              className="bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 font-bold transform hover:-translate-y-0.5"
             >
               Novo Agendamento
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-8">
             
-            <div className="space-y-1">
-              <label className="block text-sm font-semibold text-gray-700">Nome do Cliente:</label>
-              <input
-                type="text"
-                required
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                placeholder="Nome completo"
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-              />
+            <div className="grid grid-cols-1 gap-6">
+                <div>
+                  <label className={labelClass}>Nome do Cliente</label>
+                  <input
+                    type="text"
+                    required
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    placeholder="Nome completo do cliente"
+                    className={inputClass}
+                  />
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1">
-                <label className="block text-sm font-semibold text-gray-700">Telefone:</label>
+              <div>
+                <label className={labelClass}>Telefone</label>
                 <input
                   type="tel"
                   required
                   value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  placeholder="Somente números"
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  onChange={handlePhoneChange}
+                  placeholder="(00) 0000-0000"
+                  maxLength={15}
+                  className={inputClass}
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-sm font-semibold text-gray-700">Cidade:</label>
-                <select
-                  required
-                  value={cidade}
-                  onChange={(e) => setCidade(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white"
-                >
-                  <option value="">Selecione...</option>
-                  {cities.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-                <label className="block text-sm font-semibold text-gray-700">Tipo de Atividade:</label>
-                <select
-                  required
-                  value={atividade}
-                  onChange={(e) => setAtividade(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white"
-                >
-                  <option value="">Selecione a atividade...</option>
-                  {availableActivities.map(ativ => <option key={ativ} value={ativ}>{ativ}</option>)}
-                </select>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1">
-                <label className="block text-sm font-semibold text-gray-700">Data da Visita:</label>
-                <input
-                  type="date"
-                  required
-                  min={minDate}
-                  value={data}
-                  onChange={(e) => setData(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-sm font-semibold text-gray-700">Período:</label>
+              <div>
+                <label className={labelClass}>Cidade</label>
                 <div className="relative">
                   <select
-                    value={periodo}
-                    onChange={(e) => setPeriodo(e.target.value as Periodo)}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none bg-white"
+                    required
+                    value={cidade}
+                    onChange={(e) => setCidade(e.target.value)}
+                    className={`${inputClass} appearance-none`}
                   >
-                    <option value={Periodo.MANHA}>☀️ Manhã</option>
-                    <option value={Periodo.TARDE}>🌤️ Tarde</option>
-                    <option value={Periodo.NOITE}>🌙 Especial (18:00) - Fechamento</option>
+                    <option value="">Selecione...</option>
+                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Modificado: Input de texto com validação na lista de usuários */}
-            <div className="space-y-1">
-              <label className="block text-sm font-semibold text-gray-700">Identificação do Agendador (Quem está agendando):</label>
+            <div>
+                <label className={labelClass}>Tipo de Atividade</label>
+                <div className="relative">
+                    <select
+                      required
+                      value={atividade}
+                      onChange={(e) => setAtividade(e.target.value)}
+                      className={`${inputClass} appearance-none`}
+                    >
+                      <option value="">Selecione a atividade...</option>
+                      {availableActivities.map(ativ => <option key={ativ} value={ativ}>{ativ}</option>)}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                    </div>
+                </div>
+            </div>
+
+            <div className="p-6 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label className={labelClass}>Data da Visita</label>
+                    <input
+                    type="date"
+                    required
+                    min={minDate}
+                    value={data}
+                    onChange={(e) => setData(e.target.value)}
+                    className={inputClass}
+                    />
+                </div>
+
+                <div>
+                    <label className={labelClass}>Período</label>
+                    <div className="relative">
+                    <select
+                        value={periodo}
+                        onChange={(e) => setPeriodo(e.target.value as Periodo)}
+                        className={`${inputClass} appearance-none`}
+                    >
+                        <option value={Periodo.MANHA}>☀️ Manhã (08:00 às 12:00)</option>
+                        <option value={Periodo.TARDE}>🌤️ Tarde (13:00 às 17:00)</option>
+                        <option value={Periodo.NOITE}>🌙 Especial (18:00) - Fechamento</option>
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                    </div>
+                    </div>
+                </div>
+                </div>
+
+                <div>
+                    <label className={labelClass}>Técnico Disponível</label>
+                    <div className="relative">
+                        <select
+                            required
+                            value={tecnicoId}
+                            onChange={(e) => setTecnicoId(e.target.value)}
+                            disabled={!cidade || !data}
+                            className={`${inputClass} appearance-none ${
+                            (!cidade || !data) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''
+                            }`}
+                        >
+                            <option value="">
+                            {!cidade || !data 
+                                ? 'Aguardando data e cidade...' 
+                                : availableTechs.length === 0 
+                                ? '⚠️ Nenhum técnico disponível' 
+                                : 'Selecione o técnico disponível...'}
+                            </option>
+                            {availableTechs.map(tech => (
+                            <option key={tech.id} value={tech.id}>
+                                {tech.nome}
+                            </option>
+                            ))}
+                        </select>
+                         <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                            <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                        </div>
+                    </div>
+                    
+                    {tecnicoId && selectedTechData && (
+                        <div className="flex items-center gap-2 mt-3 animate-fade-in bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
+                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-300"></div>
+                            <span className="text-emerald-800 font-semibold text-sm">
+                                {periodo === Periodo.NOITE 
+                                ? "Vaga Única (Fechamento)" 
+                                : `${selectedTechData.vagasRestantes} ${selectedTechData.vagasRestantes === 1 ? 'vaga restante' : 'vagas disponíveis'}`
+                                }
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Quem está agendando?</label>
               <input
                 type="text"
                 required
                 value={nomeUsuario}
                 onChange={(e) => {
                     setNomeUsuario(e.target.value);
-                    if (userError) setUserError(null); // Limpa o erro ao digitar
+                    if (userError) setUserError(null);
                 }}
                 onBlur={() => {
-                     // Validação UX opcional no onBlur para feedback rápido
                      if (nomeUsuario && !allowedUsers.some(u => u.trim().toLowerCase() === nomeUsuario.trim().toLowerCase())) {
                          setUserError('Usuário não encontrado.');
                      }
                 }}
-                placeholder="Digite seu nome..."
-                className={`w-full px-4 py-3 rounded-lg border focus:ring-2 outline-none transition-all ${
+                placeholder="Digite seu nome cadastrado"
+                className={`${inputClass} ${
                     userError 
-                    ? 'border-red-500 focus:ring-red-200 focus:border-red-500 bg-red-50' 
-                    : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                    ? 'ring-2 ring-red-200 bg-red-50 text-red-700' 
+                    : ''
                 }`}
               />
               {userError && (
-                  <div className="flex items-center gap-2 text-red-600 text-sm mt-1 animate-pulse">
-                      <AlertIcon className="w-4 h-4" />
+                  <div className="flex items-center gap-2 text-red-500 text-xs font-semibold mt-2 animate-pulse bg-red-50 w-fit px-3 py-1 rounded-full">
+                      <AlertIcon className="w-3.5 h-3.5" />
                       <span>{userError}</span>
                   </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">Técnico Disponível:</label>
-              <select
-                required
-                value={tecnicoId}
-                onChange={(e) => setTecnicoId(e.target.value)}
-                disabled={!cidade || !data}
-                className={`w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white ${
-                  (!cidade || !data) ? 'bg-gray-100 cursor-not-allowed' : ''
-                }`}
-              >
-                <option value="">
-                  {!cidade || !data 
-                    ? 'Selecione data e cidade primeiro...' 
-                    : availableTechs.length === 0 
-                      ? 'Nenhum técnico disponível neste horário' 
-                      : 'Selecione o técnico...'}
-                </option>
-                {availableTechs.map(tech => (
-                  <option key={tech.id} value={tech.id}>
-                    {tech.nome}
-                  </option>
-                ))}
-              </select>
-              
-              {/* Exibição visual das vagas em VERDE */}
-              {tecnicoId && selectedTechData && (
-                 <div className="flex items-center gap-2 mt-2 animate-fade-in bg-green-50 p-2 rounded-md border border-green-100">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span className="text-green-700 font-bold text-sm">
-                        {periodo === Periodo.NOITE 
-                          ? "Vaga Única - Fechamento do dia" 
-                          : `${selectedTechData.vagasRestantes} ${selectedTechData.vagasRestantes === 1 ? 'vaga restante' : 'vagas restantes'} para este horário`
-                        }
-                    </span>
-                 </div>
               )}
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting || !tecnicoId || !!userError}
-              className={`w-full py-4 rounded-lg font-bold text-white text-lg flex items-center justify-center gap-2 shadow-md transition-all transform hover:-translate-y-0.5 ${
+              className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-0.5 ${
                 isSubmitting || !tecnicoId || !!userError
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-blue-700 hover:bg-blue-800'
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' 
+                  : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white'
               }`}
             >
               {isSubmitting ? (
-                <span>Processando...</span>
+                <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Confirmando...
+                </span>
               ) : (
                 <>
-                  <SaveIcon className="w-6 h-6" />
+                  <SaveIcon className="w-5 h-5" />
                   CONFIRMAR AGENDAMENTO
                 </>
               )}

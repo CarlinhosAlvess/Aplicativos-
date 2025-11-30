@@ -3,47 +3,43 @@ import { getSheetData, getUniqueCities } from '../services/mockSheetService';
 import { DatabaseSchema, StatusExecucao } from '../types';
 import { ChartIcon, AlertIcon, SparklesIcon } from './Icons';
 
-// --- Componentes Visuais Auxiliares (Gráficos CSS/SVG) ---
-
-const ProgressBar = ({ value, color = "bg-blue-600", label, showValue = true }: { value: number, color?: string, label?: string, showValue?: boolean }) => (
+const ProgressBar = ({ value, color = "bg-indigo-600", label, showValue = true }: { value: number, color?: string, label?: string, showValue?: boolean }) => (
   <div className="w-full">
-    <div className="flex justify-between mb-1">
-      {label && <span className="text-xs font-medium text-gray-700">{label}</span>}
-      {showValue && <span className="text-xs font-medium text-gray-700">{Math.round(value)}%</span>}
+    <div className="flex justify-between mb-1.5">
+      {label && <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</span>}
+      {showValue && <span className="text-xs font-bold text-slate-700">{Math.round(value)}%</span>}
     </div>
-    <div className="w-full bg-gray-200 rounded-full h-2.5">
-      <div className={`${color} h-2.5 rounded-full transition-all duration-500`} style={{ width: `${Math.min(value, 100)}%` }}></div>
+    <div className="w-full bg-slate-100 rounded-full h-2">
+      <div className={`${color} h-2 rounded-full transition-all duration-1000 shadow-sm`} style={{ width: `${Math.min(value, 100)}%` }}></div>
     </div>
   </div>
 );
 
-// Componente de Insight/Alerta
 const InsightCard = ({ type, title, message }: { type: 'danger' | 'warning' | 'success' | 'info', title: string, message: string }) => {
-    const colors = {
-        danger: 'bg-red-50 border-red-200 text-red-800',
-        warning: 'bg-amber-50 border-amber-200 text-amber-800',
-        success: 'bg-green-50 border-green-200 text-green-800',
-        info: 'bg-blue-50 border-blue-200 text-blue-800'
+    const styles = {
+        danger: 'bg-red-50 border-red-100 text-red-900',
+        warning: 'bg-amber-50 border-amber-100 text-amber-900',
+        success: 'bg-emerald-50 border-emerald-100 text-emerald-900',
+        info: 'bg-indigo-50 border-indigo-100 text-indigo-900'
     };
     const icons = {
-        danger: '⚠️',
+        danger: '🚨',
         warning: '⚡',
-        success: '✅',
-        info: 'ℹ️'
+        success: '✨',
+        info: '💡'
     };
 
     return (
-        <div className={`p-4 rounded-lg border ${colors[type]} flex items-start gap-3 shadow-sm`}>
-            <span className="text-xl">{icons[type]}</span>
+        <div className={`p-5 rounded-2xl border ${styles[type]} flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow`}>
+            <span className="text-xl bg-white w-10 h-10 flex items-center justify-center rounded-full shadow-sm shrink-0">{icons[type]}</span>
             <div>
-                <h4 className="font-bold text-sm">{title}</h4>
-                <p className="text-xs mt-1 opacity-90">{message}</p>
+                <h4 className="font-bold text-sm tracking-wide mb-1">{title}</h4>
+                <p className="text-xs opacity-90 leading-relaxed font-medium">{message}</p>
             </div>
         </div>
     );
 }
 
-// Interface definada localmente para facilitar tipagem no reduce
 interface CityStats {
     nome: string;
     tecnicos: number;
@@ -70,17 +66,15 @@ const Dashboard = () => {
         setData(getSheetData());
         setUniqueCities(getUniqueCities());
         
-        // Default date to today
         const today = new Date().toISOString().split('T')[0];
         setSelectedDate(today);
 
         return () => clearInterval(interval);
     }, []);
 
-    if (!data) return <div className="p-10 text-center text-gray-500 flex flex-col items-center gap-2"><div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>Carregando inteligência de dados...</div>;
+    if (!data) return <div className="p-20 text-center text-slate-400 flex flex-col items-center gap-4"><div className="animate-spin h-8 w-8 border-4 border-indigo-500 rounded-full border-t-transparent"></div><span className="text-sm font-medium">Carregando inteligência...</span></div>;
 
-    // --- Processamento de Dados ---
-
+    // --- Processamento (igual ao anterior) ---
     const filteredAgendamentos = data.agendamentos.filter(ag => {
         if (filterMode === 'data' && selectedDate) {
             return ag.data === selectedDate;
@@ -89,33 +83,19 @@ const Dashboard = () => {
     });
 
     const totalAgendamentos = filteredAgendamentos.length;
-    
-    // Status
     const countStatus = (status: StatusExecucao) => filteredAgendamentos.filter(a => a.statusExecucao === status).length;
     const concluidos = countStatus('Concluído');
     const naoFinalizados = countStatus('Não Finalizado');
     const emAndamento = countStatus('Em Andamento');
     const pendentes = countStatus('Pendente');
-    
-    // Taxa de Sucesso (KPI de Qualidade)
     const totalFechados = concluidos + naoFinalizados;
     const taxaSucesso = totalFechados > 0 ? Math.round((concluidos / totalFechados) * 100) : 0;
 
-    // --- ANÁLISE DE GAPS (Cidade/Capacidade) ---
-    // Recalculado para suportar múltiplas cidades por técnico
     const cidadesStats: Record<string, CityStats> = {};
-    
-    // Inicializa todas as cidades
     uniqueCities.forEach(cidade => {
-        cidadesStats[cidade] = {
-            nome: cidade,
-            tecnicos: 0,
-            agendamentos: 0,
-            capacidadeDiaria: 0
-        }
+        cidadesStats[cidade] = { nome: cidade, tecnicos: 0, agendamentos: 0, capacidadeDiaria: 0 }
     });
 
-    // Calcula capacidade técnica por cidade
     data.tecnicos.forEach(tech => {
         if (tech.cidades && Array.isArray(tech.cidades)) {
             tech.cidades.forEach(c => {
@@ -127,17 +107,11 @@ const Dashboard = () => {
         }
     });
 
-    // Calcula uso real (Agendamentos)
     filteredAgendamentos.forEach(ag => {
         if (cidadesStats[ag.cidade]) {
             cidadesStats[ag.cidade].agendamentos += 1;
         } else if (!cidadesStats[ag.cidade]) {
-            cidadesStats[ag.cidade] = {
-                nome: ag.cidade,
-                tecnicos: 0,
-                agendamentos: 1,
-                capacidadeDiaria: 0
-            };
+            cidadesStats[ag.cidade] = { nome: ag.cidade, tecnicos: 0, agendamentos: 1, capacidadeDiaria: 0 };
         }
     });
     
@@ -147,205 +121,133 @@ const Dashboard = () => {
         return satB - satA;
     });
 
-    // --- ANÁLISE DE MOTIVOS (Pareto) & NORMALIZAÇÃO ---
-    // Corrige problema de duplicação (ex: "ausente" vs "Ausente")
     const incidentesDetalhados = filteredAgendamentos.filter(a => a.statusExecucao === 'Não Finalizado');
 
     const motivosStats = incidentesDetalhados.reduce<Record<string, number>>((acc, curr) => {
         const raw = curr.motivoNaoConclusao || 'Outros';
-        // Normaliza: remove espaços nas pontas e coloca tudo minúsculo para agrupar
         const normalizedKey = raw.trim().toLowerCase();
         acc[normalizedKey] = (acc[normalizedKey] || 0) + 1;
         return acc;
     }, {});
     
-    // Converte de volta para array e capitaliza para exibição
     const chartMotivos = Object.entries(motivosStats)
         .sort((a, b) => (b[1] as number) - (a[1] as number))
         .map(([key, qtd]) => ({ 
-            motivo: key.charAt(0).toUpperCase() + key.slice(1), // Capitaliza primeira letra
+            motivo: key.charAt(0).toUpperCase() + key.slice(1), 
             qtd: Number(qtd)
         }));
 
-    // --- GERADOR DE INSIGHTS AUTOMÁTICOS ---
     const insights = [];
-    
-    // Alerta de Capacidade
     const cidadeSaturada = listaCidades.find(c => (c.agendamentos / (c.capacidadeDiaria || 1)) > 0.8);
     if (cidadeSaturada) {
-        insights.push({
-            type: 'danger' as const,
-            title: `GAP Crítico em ${cidadeSaturada.nome}`,
-            message: `A cidade está operando perto da capacidade máxima (${cidadeSaturada.agendamentos}/${cidadeSaturada.capacidadeDiaria}).`
-        });
+        insights.push({ type: 'danger' as const, title: `Atenção: ${cidadeSaturada.nome}`, message: `Operando próximo da saturação máxima (${cidadeSaturada.agendamentos}/${cidadeSaturada.capacidadeDiaria}).` });
     } else {
-        insights.push({
-            type: 'success' as const,
-            title: 'Capacidade Operacional',
-            message: 'Todas as regiões estão operando dentro dos limites de capacidade técnica.'
-        });
+        insights.push({ type: 'success' as const, title: 'Operação Saudável', message: 'Regiões dentro da capacidade ideal.' });
     }
 
-    // --- LÓGICA DE GAPS DE MELHORIAS (Diagnóstico & Plano de Ação) ---
-    // Agora usa os dados agrupados (chartMotivos) para ser mais preciso
     const oportunidadesMelhoria: Opportunity[] = [];
-
-    // Função auxiliar para somar falhas por palavras-chave
     const countFailuresByKeyword = (keywords: string[]) => {
-        return chartMotivos
-            .filter(m => keywords.some(k => m.motivo.toLowerCase().includes(k)))
-            .reduce((sum: number, m) => sum + m.qtd, 0);
+        return chartMotivos.filter(m => keywords.some(k => m.motivo.toLowerCase().includes(k))).reduce((sum: number, m) => sum + m.qtd, 0);
     };
 
-    // 1. Melhoria de Logística
     const qtdLogistica = countFailuresByKeyword(['equipamento', 'material', 'peça', 'estoque', 'ferramenta']);
-    if (qtdLogistica > 0) {
-        oportunidadesMelhoria.push({
-            area: 'Logística / Estoque',
-            problema: `${qtdLogistica} visitas perdidas por falta de material/equipamento.`,
-            acao: 'Revisar kit básico dos veículos e alinhar estoque com a demanda prevista.',
-            prioridade: 'Alta',
-            impacto: 'Redução imediata de reagendamentos e custos de deslocamento.'
-        });
-    }
+    if (qtdLogistica > 0) oportunidadesMelhoria.push({ area: 'Logística', problema: `${qtdLogistica} visitas sem material.`, acao: 'Revisar kit veicular e estoque.', prioridade: 'Alta', impacto: 'Redução de retorno.' });
 
-    // 2. Melhoria de Acesso/Cliente
     const qtdAcesso = countFailuresByKeyword(['ausente', 'fechado', 'não atende', 'endereço', 'local']);
-    if (qtdAcesso > 0) {
-        oportunidadesMelhoria.push({
-            area: 'Comunicação / CX',
-            problema: `${qtdAcesso} visitas perdidas por problemas de acesso/cliente.`,
-            acao: 'Implementar confirmação via WhatsApp 1h antes da visita.',
-            prioridade: 'Média',
-            impacto: 'Otimização do deslocamento técnico e aumento de produtividade.'
-        });
-    }
+    if (qtdAcesso > 0) oportunidadesMelhoria.push({ area: 'Comunicação', problema: `${qtdAcesso} clientes ausentes.`, acao: 'WhatsApp pré-visita.', prioridade: 'Média', impacto: 'Otimização de rotas.' });
 
-    // 3. Melhoria de Capacidade
     const cidadesCriticas = listaCidades.filter(c => (c.agendamentos / (c.capacidadeDiaria || 1)) > 0.9);
-    if (cidadesCriticas.length > 0) {
-        oportunidadesMelhoria.push({
-            area: 'Gestão de Força de Trabalho',
-            problema: `Saturação crítica (>90%) em: ${cidadesCriticas.map(c => c.nome).join(', ')}.`,
-            acao: 'Iniciar processo seletivo urgente ou remanejar técnicos de regiões vizinhas.',
-            prioridade: 'Alta',
-            impacto: 'Evitar perda de SLA e recusa de agendamentos.'
-        });
-    }
+    if (cidadesCriticas.length > 0) oportunidadesMelhoria.push({ area: 'Capacidade', problema: `Alta saturação em ${cidadesCriticas.length} regiões.`, acao: 'Remanejar ou contratar técnicos.', prioridade: 'Alta', impacto: 'SLA garantido.' });
 
-    // 4. Melhoria Técnica Geral
-    if (taxaSucesso < 85 && totalAgendamentos > 5) {
-        oportunidadesMelhoria.push({
-            area: 'Treinamento Técnico',
-            problema: `Taxa de sucesso global (${taxaSucesso}%) abaixo da meta de 85%.`,
-            acao: 'Realizar reciclagem técnica focada nos principais motivos de falha.',
-            prioridade: 'Média',
-            impacto: 'Melhoria na qualidade percebida e redução de retorno.'
-        });
-    }
+    if (taxaSucesso < 85 && totalAgendamentos > 5) oportunidadesMelhoria.push({ area: 'Qualidade', problema: `Taxa de sucesso ${taxaSucesso}% (Meta 85%).`, acao: 'Reciclagem técnica.', prioridade: 'Média', impacto: 'Qualidade percebida.' });
 
-
+    // --- RENDER ---
     return (
-        <div className="space-y-6 pb-12">
-            {/* Header com Filtros */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <div className="space-y-8 pb-12 font-sans">
+            {/* Header com Filtros Modernos */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                        <ChartIcon className="text-indigo-600" /> 
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                        <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><ChartIcon className="w-6 h-6" /></div>
                         Centro de Comando
                     </h2>
-                    <p className="text-gray-500 text-sm">Monitoramento e Análise de Falhas</p>
+                    <p className="text-slate-400 text-sm mt-1 ml-12">Análise de performance em tempo real</p>
                 </div>
-                <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                    <span className="text-xs font-bold text-gray-500 uppercase">Filtrar por Data:</span>
+                <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                     <input 
                         type="date"
                         value={selectedDate}
-                        onChange={(e) => {
-                            setSelectedDate(e.target.value);
-                            setFilterMode('data');
-                        }}
-                        className={`px-3 py-1.5 rounded-md text-sm border focus:ring-2 focus:ring-indigo-500 outline-none transition-all ${filterMode === 'data' ? 'border-indigo-500 bg-white text-indigo-700 shadow-sm' : 'border-gray-300 text-gray-600'}`}
+                        onChange={(e) => { setSelectedDate(e.target.value); setFilterMode('data'); }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium border-0 focus:ring-2 focus:ring-indigo-500 outline-none transition-all ${filterMode === 'data' ? 'bg-white text-indigo-700 shadow-sm' : 'bg-transparent text-slate-500'}`}
                     />
                     <button 
                          onClick={() => setFilterMode('todos')}
-                         className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${filterMode === 'todos' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+                         className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${filterMode === 'todos' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
                     >
-                        Ver Tudo
+                        Visão Global
                     </button>
                 </div>
             </div>
 
-            {/* Seção de Insights Automáticos (Simples) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {insights.map((insight, idx) => (
                     <InsightCard key={idx} {...insight} />
                 ))}
             </div>
 
-            {/* KPI Cards Row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-xl shadow-sm border-t-4 border-indigo-500">
-                    <span className="text-gray-400 text-xs font-bold uppercase">Volume Total</span>
-                    <div className="mt-2 text-3xl font-bold text-gray-800">{totalAgendamentos}</div>
-                    <div className="text-xs text-gray-500 mt-1">Visitas no período</div>
-                </div>
-                
-                <div className="bg-white p-5 rounded-xl shadow-sm border-t-4 border-green-500">
-                    <span className="text-gray-400 text-xs font-bold uppercase">Taxa de Sucesso</span>
-                    <div className="mt-2 text-3xl font-bold text-gray-800">{taxaSucesso}%</div>
-                    <div className="text-xs text-green-600 mt-1">Conclusão Efetiva</div>
-                </div>
-
-                <div className="bg-white p-5 rounded-xl shadow-sm border-t-4 border-yellow-500">
-                    <span className="text-gray-400 text-xs font-bold uppercase">Em Andamento</span>
-                    <div className="mt-2 text-3xl font-bold text-gray-800">{pendentes + emAndamento}</div>
-                    <div className="text-xs text-yellow-600 mt-1">Visitas ativas</div>
-                </div>
-
-                <div className="bg-white p-5 rounded-xl shadow-sm border-t-4 border-red-500">
-                    <span className="text-gray-400 text-xs font-bold uppercase">Incidências (Falhas)</span>
-                    <div className="mt-2 text-3xl font-bold text-gray-800">{naoFinalizados}</div>
-                    <div className="text-xs text-red-600 mt-1">Visitas não finalizadas</div>
-                </div>
+            {/* KPI Cards Minimalistas */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                {[
+                    { label: 'Volume Total', value: totalAgendamentos, sub: 'Visitas', color: 'text-slate-800', border: 'border-indigo-500' },
+                    { label: 'Taxa Sucesso', value: `${taxaSucesso}%`, sub: 'Conclusão', color: 'text-emerald-600', border: 'border-emerald-500' },
+                    { label: 'Em Andamento', value: pendentes + emAndamento, sub: 'Ativas', color: 'text-amber-600', border: 'border-amber-500' },
+                    { label: 'Incidências', value: naoFinalizados, sub: 'Falhas', color: 'text-rose-600', border: 'border-rose-500' }
+                ].map((kpi, idx) => (
+                    <div key={idx} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group">
+                        <div className={`absolute top-0 left-0 w-1 h-full ${kpi.border.replace('border-', 'bg-')}`}></div>
+                        <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">{kpi.label}</span>
+                        <div className={`mt-2 text-4xl font-extrabold ${kpi.color}`}>{kpi.value}</div>
+                        <div className="text-xs text-slate-400 mt-1 font-medium">{kpi.sub}</div>
+                    </div>
+                ))}
             </div>
 
-            {/* SEÇÃO NOVA: PLANO DE MELHORIAS (GAPS DE MELHORIA) */}
-            <div className="bg-white rounded-xl shadow-sm border border-indigo-100 overflow-hidden">
-                <div className="bg-indigo-50 px-6 py-4 border-b border-indigo-100">
+            {/* Plano de Melhorias */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-50 to-violet-50 px-8 py-6 border-b border-indigo-100/50">
                     <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
-                        <SparklesIcon className="w-5 h-5" />
-                        Diagnóstico e Gaps de Melhoria
+                        <SparklesIcon className="w-5 h-5 text-indigo-600" />
+                        Diagnóstico Inteligente
                     </h3>
-                    <p className="text-xs text-indigo-700">Plano de ação estratégico gerado automaticamente baseado nos dados acumulados.</p>
                 </div>
                 
                 {oportunidadesMelhoria.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500 flex flex-col items-center">
-                        <span className="text-2xl mb-2">🏆</span>
-                        <p>Nenhum gap crítico identificado no momento. A operação está eficiente!</p>
+                    <div className="p-12 text-center flex flex-col items-center">
+                        <div className="w-16 h-16 bg-emerald-50 text-2xl flex items-center justify-center rounded-full mb-4">🏆</div>
+                        <h4 className="text-slate-800 font-bold">Excelente!</h4>
+                        <p className="text-slate-500 text-sm mt-1">Nenhum gap crítico detectado nos dados atuais.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100">
                         {oportunidadesMelhoria.map((item, idx) => (
-                            <div key={idx} className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex justify-between items-start mb-3">
-                                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500 bg-gray-100 px-2 py-1 rounded">{item.area}</span>
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-full border ${
-                                        item.prioridade === 'Alta' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                            <div key={idx} className="p-8 hover:bg-slate-50/50 transition-colors">
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 border border-slate-200 px-2 py-1 rounded-md">{item.area}</span>
+                                    <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
+                                        item.prioridade === 'Alta' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
                                     }`}>
-                                        Prioridade {item.prioridade}
+                                        {item.prioridade} Prioridade
                                     </span>
                                 </div>
-                                <h4 className="font-bold text-gray-800 mb-2 text-lg">{item.acao}</h4>
-                                <div className="space-y-2">
-                                    <p className="text-sm text-red-600 bg-red-50 p-2 rounded flex items-start gap-2">
-                                        <AlertIcon className="w-4 h-4 mt-0.5 shrink-0" />
-                                        <span><strong>Problema Detectado:</strong> {item.problema}</span>
-                                    </p>
-                                    <p className="text-sm text-green-700 bg-green-50 p-2 rounded">
-                                        <strong>Impacto Esperado:</strong> {item.impacto}
-                                    </p>
+                                <h4 className="font-bold text-slate-800 mb-3 text-lg leading-tight">{item.acao}</h4>
+                                <div className="space-y-3">
+                                    <div className="text-xs text-rose-600 bg-rose-50/50 p-3 rounded-lg border border-rose-100 flex gap-2">
+                                        <AlertIcon className="w-4 h-4 shrink-0" />
+                                        {item.problema}
+                                    </div>
+                                    <div className="text-xs text-emerald-700 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 font-medium">
+                                        Impacto: {item.impacto}
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -353,85 +255,28 @@ const Dashboard = () => {
                 )}
             </div>
 
-             {/* TABELA DE DETALHAMENTO DE FALHAS */}
-             <div className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden">
-                <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex justify-between items-center">
-                    <div>
-                        <h3 className="text-lg font-bold text-red-800 flex items-center gap-2">
-                            <AlertIcon className="w-5 h-5" />
-                            Relatório de Incidências
-                        </h3>
-                        <p className="text-xs text-red-600">Detalhamento dos serviços não finalizados por cliente</p>
-                    </div>
-                    <div className="text-red-800 font-bold bg-white px-3 py-1 rounded-full text-sm border border-red-100 shadow-sm">
-                        {incidentesDetalhados.length} Casos
-                    </div>
-                </div>
+            {/* Gráficos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 
-                {incidentesDetalhados.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500 italic">
-                        Nenhuma incidência registrada para o filtro selecionado.
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-red-700 uppercase bg-red-50/50">
-                                <tr>
-                                    <th className="px-6 py-3">Data</th>
-                                    <th className="px-6 py-3">Cliente</th>
-                                    <th className="px-6 py-3">Técnico</th>
-                                    <th className="px-6 py-3">Motivo da Não Conclusão</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {incidentesDetalhados.map((item) => (
-                                    <tr key={item.id} className="bg-white border-b hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
-                                            {item.data}
-                                        </td>
-                                        <td className="px-6 py-4 font-bold text-gray-800">
-                                            {item.cliente}
-                                            <div className="text-xs font-normal text-gray-500">{item.cidade}</div>
-                                        </td>
-                                        <td className="px-6 py-4 text-blue-600">
-                                            {item.tecnicoNome}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="bg-red-100 text-red-800 text-xs font-bold px-2.5 py-0.5 rounded border border-red-200">
-                                                {item.motivoNaoConclusao || 'Motivo não informado'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            {/* GAP ANALYSIS & GRAPHS */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
-                {/* Capacidade vs Demanda (GAPS) */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-lg font-bold text-gray-800 mb-6">Saturação de Capacidade (Por Cidade)</h3>
+                {/* Saturação */}
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800 mb-8">Capacidade vs Demanda</h3>
                     <div className="space-y-6">
                         {listaCidades.map((cid, idx) => {
                             const percentualSaturacao = Math.min((cid.agendamentos / (cid.capacidadeDiaria || 1)) * 100, 100);
-                            const corBarra = percentualSaturacao > 80 ? 'bg-red-500' : percentualSaturacao > 50 ? 'bg-blue-500' : 'bg-green-500';
+                            const corBarra = percentualSaturacao > 80 ? 'bg-rose-500 shadow-rose-200' : percentualSaturacao > 50 ? 'bg-indigo-500 shadow-indigo-200' : 'bg-emerald-500 shadow-emerald-200';
                             
                             return (
                                 <div key={idx}>
-                                    <div className="flex justify-between text-sm mb-1">
-                                        <span className="font-bold text-gray-700 w-1/4">{cid.nome}</span>
-                                        <div className="flex-1 px-4 flex justify-between text-xs text-gray-500">
-                                            <span>Cap: {cid.capacidadeDiaria}</span>
-                                            <span>Uso: {cid.agendamentos}</span>
+                                    <div className="flex justify-between text-sm mb-2">
+                                        <span className="font-semibold text-slate-700">{cid.nome}</span>
+                                        <div className="text-xs font-mono text-slate-400">
+                                            {cid.agendamentos} <span className="text-slate-300">/</span> {cid.capacidadeDiaria}
                                         </div>
                                     </div>
-                                    <div className="relative w-full h-4 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="relative w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                                         <div 
-                                            className={`h-full rounded-full transition-all duration-1000 ${corBarra}`} 
+                                            className={`h-full rounded-full transition-all duration-1000 shadow-md ${corBarra}`} 
                                             style={{ width: `${percentualSaturacao}%` }}
                                         ></div>
                                     </div>
@@ -441,28 +286,78 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                {/* Pareto de Falhas */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-lg font-bold text-gray-800 mb-6">Principais Motivos de Falha</h3>
+                {/* Pareto */}
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800 mb-8">Motivos de Falha</h3>
                     {chartMotivos.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-40 bg-gray-50 rounded-lg">
-                            <span className="text-gray-400">Sem falhas registradas</span>
+                        <div className="flex flex-col items-center justify-center h-48 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                            <span className="text-slate-400 text-sm font-medium">Sem dados de falha registrados</span>
                         </div>
                     ) : (
-                        <div className="space-y-4">
+                        <div className="space-y-6">
                             {chartMotivos.map((m, idx) => (
-                                <div key={idx} className="group">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className="text-sm font-bold text-gray-700">{m.motivo}</span>
-                                        <span className="text-sm font-bold text-red-500">{m.qtd}</span>
+                                <div key={idx}>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-sm font-semibold text-slate-700">{m.motivo}</span>
+                                        <span className="text-xs font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded">{m.qtd}</span>
                                     </div>
-                                    <ProgressBar value={(m.qtd / (naoFinalizados || 1)) * 100} color="bg-red-400" showValue={false} />
+                                    <ProgressBar value={(m.qtd / (naoFinalizados || 1)) * 100} color="bg-rose-400" showValue={false} />
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
 
+            </div>
+
+             {/* Tabela Incidências */}
+             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+                    <h3 className="text-lg font-bold text-slate-800">
+                        Relatório de Incidências
+                    </h3>
+                    <span className="bg-white px-3 py-1 rounded-full text-xs font-bold border border-slate-200 text-slate-500 shadow-sm">
+                        {incidentesDetalhados.length} Registros
+                    </span>
+                </div>
+                
+                {incidentesDetalhados.length === 0 ? (
+                     <div className="p-8 text-center text-slate-400 italic">Nenhuma pendência.</div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs text-slate-500 font-semibold uppercase bg-slate-50 border-b border-slate-100">
+                                <tr>
+                                    <th className="px-8 py-4">Data</th>
+                                    <th className="px-8 py-4">Cliente</th>
+                                    <th className="px-8 py-4">Técnico</th>
+                                    <th className="px-8 py-4">Motivo</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {incidentesDetalhados.map((item) => (
+                                    <tr key={item.id} className="bg-white hover:bg-slate-50 transition-colors">
+                                        <td className="px-8 py-4 whitespace-nowrap text-slate-600 font-mono text-xs">
+                                            {item.data}
+                                        </td>
+                                        <td className="px-8 py-4 font-semibold text-slate-800">
+                                            {item.cliente}
+                                            <div className="text-[10px] uppercase tracking-wider text-slate-400 mt-0.5">{item.cidade}</div>
+                                        </td>
+                                        <td className="px-8 py-4 text-indigo-600 font-medium">
+                                            {item.tecnicoNome}
+                                        </td>
+                                        <td className="px-8 py-4">
+                                            <span className="inline-block bg-rose-50 text-rose-700 text-xs font-bold px-2 py-1 rounded border border-rose-100">
+                                                {item.motivoNaoConclusao}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
         </div>
     );

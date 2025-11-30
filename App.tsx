@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import BookingForm from './components/BookingForm';
 import SheetEditor from './components/SheetEditor';
@@ -9,25 +8,32 @@ function App() {
   const [view, setView] = useState<'form' | 'sheet' | 'dashboard'>('form');
 
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-900 pb-20 relative">
-      {/* Navbar */}
-      <nav className="shadow-sm border-b border-gray-200 sticky top-0 z-50 bg-indigo-900 text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 relative font-sans">
+      {/* Navbar Clean & Modern */}
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-2">
-              <div className="bg-white text-indigo-900 w-8 h-8 rounded-lg flex items-center justify-center font-bold">
+          <div className="flex justify-between h-20 items-center">
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shadow-lg shadow-indigo-200">
                 A
               </div>
-              <span className="font-bold text-xl tracking-tight text-white">
-                Agendamento Técnico
-              </span>
+              <div className="flex flex-col">
+                <span className="font-bold text-xl tracking-tight text-slate-800 leading-tight">
+                  Agendamento Técnico
+                </span>
+                <span className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
+                  Gestão Inteligente
+                </span>
+              </div>
             </div>
             
-            <div className="flex items-center space-x-2 md:space-x-4">
+            <div className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-xl border border-slate-200/60">
               <button
                 onClick={() => setView('form')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  view === 'form' ? 'bg-indigo-700 text-white shadow-sm' : 'text-indigo-200 hover:text-white hover:bg-indigo-800'
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  view === 'form' 
+                  ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
                 }`}
               >
                 <EditIcon className="w-4 h-4" />
@@ -36,8 +42,10 @@ function App() {
 
               <button
                 onClick={() => setView('dashboard')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  view === 'dashboard' ? 'bg-indigo-700 text-white shadow-sm' : 'text-indigo-200 hover:text-white hover:bg-indigo-800'
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  view === 'dashboard' 
+                  ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
                 }`}
               >
                 <ChartIcon className="w-4 h-4" />
@@ -46,8 +54,10 @@ function App() {
 
               <button
                 onClick={() => setView('sheet')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  view === 'sheet' ? 'bg-indigo-700 text-white shadow-sm' : 'text-indigo-200 hover:text-white hover:bg-indigo-800'
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  view === 'sheet' 
+                  ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
                 }`}
               >
                 <TableIcon className="w-4 h-4" />
@@ -59,14 +69,13 @@ function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {view === 'form' && (
           <div className="animate-fade-in-up">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">Portal do Colaborador</h1>
-              <p className="mt-2 text-lg text-gray-600">
-                Preencha os dados abaixo para agendar uma nova visita técnica.
-              </p>
+              <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight sm:text-4xl">
+                Novo Agendamento
+              </h1>
             </div>
             <BookingForm />
           </div>
@@ -74,10 +83,10 @@ function App() {
 
         {view === 'sheet' && (
           <div className="animate-fade-in-up">
-            <div className="mb-6 flex items-center justify-between">
+            <div className="mb-8 flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Gerenciamento de Dados</h1>
-                    <p className="text-gray-600">Simulação da integração com Google Sheets.</p>
+                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Base de Dados</h1>
+                    <p className="text-slate-500 mt-1">Gerenciamento centralizado de técnicos e recursos.</p>
                 </div>
             </div>
             <SheetEditor />

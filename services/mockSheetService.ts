@@ -1,7 +1,7 @@
 
-import { Agendamento, DatabaseSchema, Periodo, Tecnico, TecnicoDisponivel } from '../types';
+import { Agendamento, DatabaseSchema, Periodo, Tecnico, TecnicoDisponivel, Usuario } from '../types';
 
-const STORAGE_KEY = 'app_agendamento_sheet_data_v6'; // Atualizado versão para novas colunas
+const STORAGE_KEY = 'app_agendamento_sheet_data_v8'; // Version bumped to apply new password
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
 
@@ -78,10 +78,10 @@ const INITIAL_DATA: DatabaseSchema = {
     "Campinas", "Jundiaí", "Sorocaba", "Santos"
   ],
   usuarios: [
-    "Administrador",
-    "Atendente 1",
-    "Atendente 2",
-    "Gerente"
+    { nome: "Administrador", senha: "1234" },
+    { nome: "Atendente 1", senha: "123" },
+    { nome: "Atendente 2", senha: "123" },
+    { nome: "Gerente", senha: "123" }
   ],
   feriados: [
       "2025-12-25", // Natal
@@ -127,10 +127,15 @@ export const getSheetData = (): DatabaseSchema => {
     try {
         const parsed = JSON.parse(data);
         
-        // --- Migrações de Schema para evitar erros com dados antigos ---
+        // --- Migrações de Schema ---
 
+        // Migração de Usuários (String -> Object)
+        if (parsed.usuarios && parsed.usuarios.length > 0 && typeof parsed.usuarios[0] === 'string') {
+            parsed.usuarios = parsed.usuarios.map((u: string) => ({ nome: u, senha: '123' }));
+        }
+
+        // Garante campos de sábado/domingo/feriado
         if (parsed.tecnicos.length > 0) {
-            // Garante campos de sábado/domingo/feriado
             if (typeof parsed.tecnicos[0].capacidadeSabado === 'undefined') {
                  parsed.tecnicos = parsed.tecnicos.map((t: any) => ({
                      ...t,
@@ -146,20 +151,10 @@ export const getSheetData = (): DatabaseSchema => {
             parsed.feriados = INITIAL_DATA.feriados;
         }
 
-        // Garante array de técnicos e cidades (migração anterior)
-        if (parsed.tecnicos.length > 0 && !parsed.tecnicos[0].cidades) {
-             // Se dados muito antigos, reseta tudo
-             return INITIAL_DATA; 
-        }
-
         if (!parsed.cidades) {
-            const extractedCities = new Set<string>();
-            parsed.tecnicos.forEach((t: Tecnico) => {
-                if(t.cidades) t.cidades.forEach(c => extractedCities.add(c));
-            });
-            parsed.cidades = Array.from(extractedCities).sort();
+            parsed.cidades = INITIAL_DATA.cidades;
         }
-
+        
         if (!parsed.usuarios) {
             parsed.usuarios = INITIAL_DATA.usuarios;
         }
@@ -185,14 +180,12 @@ export const addAgendamento = (agendamento: Agendamento) => {
 export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo: Periodo): TecnicoDisponivel[] => {
   const db = getSheetData();
   
-  // Identifica o tipo de dia
-  const dateObj = new Date(dataStr + 'T12:00:00'); // T12 para evitar timezone issues
-  const dayOfWeek = dateObj.getDay(); // 0 = Domingo, 6 = Sábado
+  const dateObj = new Date(dataStr + 'T12:00:00');
+  const dayOfWeek = dateObj.getDay();
   const isSaturday = dayOfWeek === 6;
   const isSunday = dayOfWeek === 0;
   const isHoliday = (db.feriados || []).includes(dataStr);
 
-  // Filtra técnicos que atendem a cidade
   const cityTechs = db.tecnicos.filter(t => 
     t.cidades && t.cidades.some(c => c.trim().toLowerCase() === cidade.trim().toLowerCase())
   );
@@ -202,36 +195,21 @@ export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo
     let appointmentsCount = 0;
 
     if (isHoliday) {
-        // Regra de Feriado: Usa capacidadeFeriado e conta TOTAL do dia (ignora periodo)
         capacity = tech.capacidadeFeriado || 0;
-        appointmentsCount = db.agendamentos.filter(a => 
-            a.tecnicoId === tech.id && 
-            a.data === dataStr
-        ).length;
+        appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else if (isSaturday) {
-        // Regra de Sábado: Usa capacidadeSabado e conta TOTAL do dia (ignora periodo)
         capacity = tech.capacidadeSabado || 0;
-        appointmentsCount = db.agendamentos.filter(a => 
-            a.tecnicoId === tech.id && 
-            a.data === dataStr
-        ).length;
+        appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else if (isSunday) {
-        // Regra de Domingo: Usa capacidadeDomingo e conta TOTAL do dia (ignora periodo)
         capacity = tech.capacidadeDomingo || 0;
-        appointmentsCount = db.agendamentos.filter(a => 
-            a.tecnicoId === tech.id && 
-            a.data === dataStr
-        ).length;
+        appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else {
-        // Dias de Semana (Seg-Sex): Usa regra normal por período
         if (periodo === Periodo.MANHA) capacity = tech.capacidadeManha;
         else if (periodo === Periodo.TARDE) capacity = tech.capacidadeTarde;
         else if (periodo === Periodo.NOITE) capacity = tech.capacidadeNoite || 0;
 
         appointmentsCount = db.agendamentos.filter(a => 
-            a.tecnicoId === tech.id && 
-            a.data === dataStr && 
-            a.periodo === periodo
+            a.tecnicoId === tech.id && a.data === dataStr && a.periodo === periodo
         ).length;
     }
     
@@ -254,7 +232,8 @@ export const getAtividades = (): string[] => {
   return db.atividades || [];
 };
 
+// Retorna apenas nomes para o Dropdown/Validação, abstraindo a senha
 export const getUsuarios = (): string[] => {
     const db = getSheetData();
-    return db.usuarios || [];
+    return db.usuarios ? db.usuarios.map(u => u.nome) : [];
 }

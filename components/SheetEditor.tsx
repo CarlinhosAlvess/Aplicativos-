@@ -9,7 +9,6 @@ const SheetEditor = () => {
   const [activeTab, setActiveTab] = useState<'tecnicos' | 'agendamentos' | 'atividades' | 'cidades' | 'usuarios' | 'feriados'>('tecnicos');
   const [newCityInput, setNewCityInput] = useState<{techIndex: number, value: string} | null>(null);
 
-  // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
@@ -21,40 +20,28 @@ const SheetEditor = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulação de autenticação simples
-    // Apenas 'Administrador' e 'Gerente' podem acessar
-    // Senha padrão para teste: 1234
-    
     if (!data) return;
-
-    // Lista de cargos permitidos a editar a planilha
-    const allowedRoles = ['administrador', 'gerente', 'coordenador'];
-    const userRole = loginUser.toLowerCase();
     
-    // Verifica se o usuário digitado contém alguma das palavras chave (ex: 'Administrador')
-    const isAllowedUser = allowedRoles.some(role => userRole.includes(role));
+    // Find the user in the database
+    const targetUser = data.usuarios.find(u => u.nome === loginUser);
 
-    if (isAllowedUser && loginPass === '1234') {
+    if (targetUser && targetUser.senha === loginPass) {
         setIsAuthenticated(true);
         setLoginError('');
     } else {
-        setLoginError('Acesso negado. Verifique usuário e senha.');
+        setLoginError('Senha incorreta para este usuário.');
     }
   };
 
   const handleTechChange = (index: number, field: keyof Tecnico, value: string | number) => {
     if (!data) return;
     const newTechs = [...data.tecnicos];
-    
-    // Lista de campos numéricos
     const numFields = ['capacidadeManha', 'capacidadeTarde', 'capacidadeNoite', 'capacidadeSabado', 'capacidadeDomingo', 'capacidadeFeriado'];
-    
     if (numFields.includes(field as string)) {
         (newTechs[index] as any)[field] = Number(value);
     } else {
         (newTechs[index] as any)[field] = value;
     }
-    
     setData({ ...data, tecnicos: newTechs });
   };
 
@@ -67,12 +54,10 @@ const SheetEditor = () => {
 
   const handleAddCityToTech = (techIndex: number) => {
       if (!data || !newCityInput || newCityInput.techIndex !== techIndex || !newCityInput.value.trim()) return;
-      
       const newTechs = [...data.tecnicos];
       if (!newTechs[techIndex].cidades.includes(newCityInput.value.trim())) {
           newTechs[techIndex].cidades.push(newCityInput.value.trim());
       }
-      
       setData({ ...data, tecnicos: newTechs });
       setNewCityInput(null);
   };
@@ -117,10 +102,17 @@ const SheetEditor = () => {
       setData({...data, cidades: newCities});
   }
 
-  const handleUsuarioChange = (index: number, value: string) => {
+  const handleUsuarioNameChange = (index: number, value: string) => {
       if (!data) return;
       const newUsers = [...(data.usuarios || [])];
-      newUsers[index] = value;
+      newUsers[index].nome = value;
+      setData({ ...data, usuarios: newUsers });
+  };
+
+  const handleUsuarioPassChange = (index: number, value: string) => {
+      if (!data) return;
+      const newUsers = [...(data.usuarios || [])];
+      newUsers[index].senha = value;
       setData({ ...data, usuarios: newUsers });
   };
 
@@ -133,11 +125,10 @@ const SheetEditor = () => {
 
   const handleAddUsuario = () => {
       if(!data) return;
-      const newUsers = [...(data.usuarios || []), "Novo Usuário"];
+      const newUsers = [...(data.usuarios || []), { nome: "Novo Usuário", senha: "123" }];
       setData({...data, usuarios: newUsers});
   }
 
-  // --- CRUD FERIADOS ---
   const handleFeriadoChange = (index: number, value: string) => {
     if (!data) return;
     const newFeriados = [...(data.feriados || [])];
@@ -154,11 +145,9 @@ const SheetEditor = () => {
 
   const handleAddFeriado = () => {
     if(!data) return;
-    // Adiciona data de amanhã como default
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const dateStr = tomorrow.toISOString().split('T')[0];
-    
     const newFeriados = [...(data.feriados || []), dateStr];
     setData({...data, feriados: newFeriados});
   }
@@ -167,11 +156,9 @@ const SheetEditor = () => {
       if (!data) return;
       const newAgendamentos = [...data.agendamentos];
       newAgendamentos[index].statusExecucao = value;
-      
       if (value !== 'Não Finalizado') {
           newAgendamentos[index].motivoNaoConclusao = '';
       }
-      
       setData({ ...data, agendamentos: newAgendamentos });
   }
 
@@ -185,7 +172,7 @@ const SheetEditor = () => {
   const handleSave = () => {
     if (data) {
       saveSheetData(data);
-      alert('Planilha atualizada com sucesso!');
+      alert('Dados salvos com sucesso.');
     }
   };
 
@@ -205,55 +192,55 @@ const SheetEditor = () => {
       setData({...data, tecnicos: [...data.tecnicos, newTech]});
   }
 
-  if (!data) return <div>Carregando planilha...</div>;
+  const isAdmin = loginUser === 'Administrador';
 
-  // --- LOGIN SCREEN ---
+  if (!data) return <div className="text-center p-10 text-slate-500">Iniciando base de dados...</div>;
+
   if (!isAuthenticated) {
       return (
-          <div className="flex flex-col items-center justify-center h-[500px] bg-white rounded-xl shadow-lg border border-gray-200">
-              <div className="bg-gray-100 p-8 rounded-2xl shadow-sm text-center max-w-sm w-full">
-                  <div className="flex justify-center mb-4">
-                      <div className="bg-indigo-100 p-4 rounded-full">
-                        <LockIcon className="w-8 h-8 text-indigo-600" />
+          <div className="flex flex-col items-center justify-center h-[500px] bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100">
+              <div className="bg-slate-50 p-10 rounded-2xl border border-slate-200 text-center max-w-sm w-full">
+                  <div className="flex justify-center mb-6">
+                      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                        <LockIcon className="w-8 h-8 text-slate-700" />
                       </div>
                   </div>
-                  <h2 className="text-xl font-bold text-gray-800 mb-2">Área Restrita</h2>
-                  <p className="text-sm text-gray-500 mb-6">Esta área é exclusiva para gestão. Identifique-se para continuar.</p>
+                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Área de Gestão</h2>
+                  <p className="text-sm text-slate-500 mb-8 font-light">Identifique-se para gerenciar os dados.</p>
                   
-                  <form onSubmit={handleLogin} className="space-y-4">
+                  <form onSubmit={handleLogin} className="space-y-5">
                       <div className="text-left">
-                          <label className="block text-xs font-bold text-gray-700 mb-1">Usuário Autorizado</label>
+                          <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Usuário</label>
                           <select 
-                             className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                             className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700 font-medium transition-all"
                              value={loginUser}
                              onChange={(e) => setLoginUser(e.target.value)}
                              required
                           >
                               <option value="">Selecione...</option>
-                              {(data.usuarios || []).map(u => <option key={u} value={u}>{u}</option>)}
+                              {(data.usuarios || []).map(u => <option key={u.nome} value={u.nome}>{u.nome}</option>)}
                           </select>
                       </div>
                       <div className="text-left">
-                          <label className="block text-xs font-bold text-gray-700 mb-1">Senha de Acesso</label>
+                          <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Senha</label>
                           <input 
                             type="password" 
-                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
-                            placeholder="Digite a senha"
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700 font-medium transition-all"
+                            placeholder="••••••"
                             value={loginPass}
                             onChange={(e) => setLoginPass(e.target.value)}
                             required
                           />
-                          <p className="text-[10px] text-gray-400 mt-1">Dica para teste: Senha é 1234</p>
                       </div>
                       
                       {loginError && (
-                          <div className="text-red-500 text-xs font-bold bg-red-50 p-2 rounded">
+                          <div className="text-rose-600 text-xs font-bold bg-rose-50 p-3 rounded-lg border border-rose-100">
                               {loginError}
                           </div>
                       )}
 
-                      <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded hover:bg-indigo-700 transition">
-                          Acessar Planilha
+                      <button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition shadow-lg shadow-slate-200">
+                          Acessar Base de Dados
                       </button>
                   </form>
               </div>
@@ -261,97 +248,85 @@ const SheetEditor = () => {
       );
   }
 
-  // --- EDITOR CONTENT (Apenas aparece se isAuthenticated === true) ---
-
-  const tabClass = (tab: string) => `px-4 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap ${
+  const tabClass = (tab: string) => `px-4 py-3 rounded-t-xl text-sm font-bold transition-all whitespace-nowrap ${
     activeTab === tab 
-      ? 'bg-white text-green-800 border-t border-x border-gray-300 shadow-sm relative top-[1px]' 
-      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+      ? 'bg-white text-indigo-600 shadow-[0_-2px_10px_rgba(0,0,0,0.02)] border-t-2 border-indigo-500' 
+      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
   }`;
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden flex flex-col h-[600px]">
-      <div className="bg-green-700 p-3 flex justify-between items-center text-white">
-        <div className="flex items-center gap-2">
-          <TableIcon className="w-6 h-6" />
-          <span className="font-semibold text-lg">Google Sheets (Simulação)</span>
-        </div>
+    <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden flex flex-col h-[650px]">
+      <div className="bg-slate-50 border-b border-slate-200 p-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
-             <span className="text-xs bg-green-800 px-2 py-1 rounded text-green-100">Logado como: {loginUser}</span>
+          <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm"><TableIcon className="w-5 h-5 text-indigo-600" /></div>
+          <span className="font-bold text-slate-700">Editor de Dados</span>
+        </div>
+        <div className="flex items-center gap-4">
+             <span className="text-xs font-medium text-slate-400">Logado: <span className="text-slate-700 font-bold">{loginUser}</span> {isAdmin && <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] uppercase ml-1">Admin</span>}</span>
             <button 
                 onClick={handleSave}
-                className="bg-white text-green-700 px-4 py-1.5 rounded font-bold text-sm hover:bg-green-50 transition flex items-center gap-2"
+                className="bg-indigo-600 text-white px-5 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition shadow-md shadow-indigo-100 flex items-center gap-2"
             >
                 <SaveIcon className="w-4 h-4" />
-                Salvar Alterações
+                Salvar
             </button>
         </div>
       </div>
 
-      <div className="bg-gray-100 border-b border-gray-300 flex px-2 pt-2 gap-1 overflow-x-auto">
-        <button onClick={() => setActiveTab('tecnicos')} className={tabClass('tecnicos')}>
-          Página1 (Técnicos)
-        </button>
-        <button onClick={() => setActiveTab('agendamentos')} className={tabClass('agendamentos')}>
-          Página2 (Agendamentos)
-        </button>
-        <button onClick={() => setActiveTab('cidades')} className={tabClass('cidades')}>
-          Página3 (Cidades)
-        </button>
-        <button onClick={() => setActiveTab('atividades')} className={tabClass('atividades')}>
-          Página4 (Atividades)
-        </button>
-        <button onClick={() => setActiveTab('usuarios')} className={tabClass('usuarios')}>
-          Página5 (Usuários)
-        </button>
-        <button onClick={() => setActiveTab('feriados')} className={tabClass('feriados')}>
-          Página6 (Feriados)
-        </button>
+      <div className="bg-slate-50 px-6 pt-2 flex gap-2 overflow-x-auto border-b border-slate-200 scrollbar-hide">
+        <button onClick={() => setActiveTab('tecnicos')} className={tabClass('tecnicos')}>Técnicos</button>
+        <button onClick={() => setActiveTab('agendamentos')} className={tabClass('agendamentos')}>Agendamentos</button>
+        <button onClick={() => setActiveTab('cidades')} className={tabClass('cidades')}>Cidades</button>
+        <button onClick={() => setActiveTab('atividades')} className={tabClass('atividades')}>Atividades</button>
+        <button onClick={() => setActiveTab('usuarios')} className={tabClass('usuarios')}>Usuários</button>
+        <button onClick={() => setActiveTab('feriados')} className={tabClass('feriados')}>Feriados</button>
       </div>
 
-      <div className="flex-1 overflow-auto bg-white p-4">
+      <div className="flex-1 overflow-auto bg-white p-6">
+        
         {activeTab === 'tecnicos' && (
-          <div className="space-y-4">
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                  <p className="text-sm text-yellow-700">
-                      <strong>Capacidades:</strong> Para Sábados, Domingos e Feriados, a capacidade definida é o <strong>total do dia</strong>, independente do período (Manhã/Tarde).
+          <div className="space-y-6">
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex gap-3">
+                  <span className="text-amber-500 text-xl">💡</span>
+                  <p className="text-sm text-amber-800 leading-relaxed">
+                      <strong>Dica de Capacidade:</strong> Para fins de semana e feriados, o número define o total de visitas permitidas no dia inteiro (ignorando turnos).
                   </p>
               </div>
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="bg-gray-50 text-left">
-                  <th className="border p-2">Nome</th>
-                  <th className="border p-2 min-w-[200px]">Cidades</th>
-                  <th className="border p-2 w-16 bg-blue-50 text-center" title="Capacidade Manhã">Manhã</th>
-                  <th className="border p-2 w-16 bg-blue-50 text-center" title="Capacidade Tarde">Tarde</th>
-                  <th className="border p-2 w-16 bg-blue-50 text-center" title="Capacidade 18h">18h</th>
-                  <th className="border p-2 w-16 bg-orange-50 text-center text-orange-800" title="Total Sábado">Sáb</th>
-                  <th className="border p-2 w-16 bg-red-50 text-center text-red-800" title="Total Domingo">Dom</th>
-                  <th className="border p-2 w-16 bg-purple-50 text-center text-purple-800" title="Total Feriado">Feriado</th>
+                <tr className="bg-slate-50 text-left border-b border-slate-100">
+                  <th className="p-4 font-bold text-slate-600 rounded-tl-xl">Nome</th>
+                  <th className="p-4 font-bold text-slate-600 min-w-[200px]">Área de Atuação</th>
+                  <th className="p-4 font-bold text-slate-600 text-center w-20 bg-indigo-50/50">Manhã</th>
+                  <th className="p-4 font-bold text-slate-600 text-center w-20 bg-indigo-50/50">Tarde</th>
+                  <th className="p-4 font-bold text-slate-600 text-center w-20 bg-indigo-50/50">18h</th>
+                  <th className="p-4 font-bold text-slate-600 text-center w-20 bg-amber-50/50">Sáb</th>
+                  <th className="p-4 font-bold text-slate-600 text-center w-20 bg-rose-50/50">Dom</th>
+                  <th className="p-4 font-bold text-slate-600 text-center w-20 rounded-tr-xl bg-purple-50/50">Feriado</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {data.tecnicos.map((tech, idx) => (
-                  <tr key={tech.id} className="hover:bg-gray-50">
-                    <td className="border p-0">
+                  <tr key={tech.id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="p-3">
                       <input 
-                        className="w-full p-2 outline-none bg-transparent focus:bg-blue-50"
+                        className="w-full p-2 rounded-lg border-transparent hover:border-slate-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none bg-transparent transition-all font-medium text-slate-700"
                         value={tech.nome}
                         onChange={(e) => handleTechChange(idx, 'nome', e.target.value)}
                       />
                     </td>
-                    <td className="border p-2">
+                    <td className="p-3">
                         <div className="flex flex-wrap gap-2">
                             {tech.cidades.map((city, cIdx) => (
-                                <span key={cIdx} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs flex items-center gap-1">
+                                <span key={cIdx} className="bg-white border border-slate-200 text-slate-600 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm">
                                     {city}
-                                    <button onClick={() => handleRemoveCityFromTech(idx, city)} className="hover:text-red-600 font-bold">×</button>
+                                    <button onClick={() => handleRemoveCityFromTech(idx, city)} className="text-slate-400 hover:text-rose-500 transition-colors">×</button>
                                 </span>
                             ))}
                             {newCityInput?.techIndex === idx ? (
                                 <select 
                                     autoFocus
-                                    className="border border-blue-300 rounded px-1 py-0.5 text-xs w-24 outline-none"
+                                    className="border border-indigo-300 rounded-lg px-2 py-1 text-xs w-32 outline-none shadow-sm"
                                     value={newCityInput.value}
                                     onChange={(e) => {
                                         if (e.target.value) {
@@ -361,105 +336,195 @@ const SheetEditor = () => {
                                     }}
                                     onBlur={() => handleAddCityToTech(idx)}
                                 >
-                                    <option value="">...</option>
+                                    <option value="">Selecionar...</option>
                                     {(data.cidades || []).filter(c => !tech.cidades.includes(c)).map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             ) : (
-                                <button onClick={() => setNewCityInput({techIndex: idx, value: ''})} className="text-gray-400 hover:text-blue-600 text-xs border border-dashed border-gray-300 px-2 rounded">+</button>
+                                <button onClick={() => setNewCityInput({techIndex: idx, value: ''})} className="text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-md text-xs font-bold transition-colors">+</button>
                             )}
                         </div>
                     </td>
-                    {/* Dias Úteis */}
-                    <td className="border p-0 bg-blue-50"><input type="number" className="w-full p-2 text-center outline-none bg-transparent" value={tech.capacidadeManha} onChange={(e) => handleTechChange(idx, 'capacidadeManha', e.target.value)} /></td>
-                    <td className="border p-0 bg-blue-50"><input type="number" className="w-full p-2 text-center outline-none bg-transparent" value={tech.capacidadeTarde} onChange={(e) => handleTechChange(idx, 'capacidadeTarde', e.target.value)} /></td>
-                    <td className="border p-0 bg-blue-50"><input type="number" className="w-full p-2 text-center outline-none bg-transparent" value={tech.capacidadeNoite || 0} onChange={(e) => handleTechChange(idx, 'capacidadeNoite', e.target.value)} /></td>
+                    {/* Capacidades */}
+                    <td className="p-1 bg-indigo-50/30"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeManha} onChange={(e) => handleTechChange(idx, 'capacidadeManha', e.target.value)} /></td>
+                    <td className="p-1 bg-indigo-50/30"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeTarde} onChange={(e) => handleTechChange(idx, 'capacidadeTarde', e.target.value)} /></td>
+                    <td className="p-1 bg-indigo-50/30"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeNoite || 0} onChange={(e) => handleTechChange(idx, 'capacidadeNoite', e.target.value)} /></td>
                     
-                    {/* Especiais */}
-                    <td className="border p-0 bg-orange-50"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-bold text-orange-800" value={tech.capacidadeSabado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeSabado', e.target.value)} /></td>
-                    <td className="border p-0 bg-red-50"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-bold text-red-800" value={tech.capacidadeDomingo || 0} onChange={(e) => handleTechChange(idx, 'capacidadeDomingo', e.target.value)} /></td>
-                    <td className="border p-0 bg-purple-50"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-bold text-purple-800" value={tech.capacidadeFeriado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeFeriado', e.target.value)} /></td>
+                    <td className="p-1 bg-amber-50/30"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-bold text-amber-700" value={tech.capacidadeSabado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeSabado', e.target.value)} /></td>
+                    <td className="p-1 bg-rose-50/30"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-bold text-rose-700" value={tech.capacidadeDomingo || 0} onChange={(e) => handleTechChange(idx, 'capacidadeDomingo', e.target.value)} /></td>
+                    <td className="p-1 bg-purple-50/30"><input type="number" className="w-full p-2 text-center outline-none bg-transparent font-bold text-purple-700" value={tech.capacidadeFeriado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeFeriado', e.target.value)} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <button onClick={handleAddTech} className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2">+ Adicionar Técnico</button>
+            <button onClick={handleAddTech} className="text-indigo-600 hover:text-indigo-800 font-bold text-sm bg-indigo-50 px-4 py-2 rounded-lg transition-colors shadow-sm">+ Novo Técnico</button>
           </div>
         )}
 
-        {activeTab === 'feriados' && (
-          <div className="space-y-4">
-              <div className="bg-purple-50 border-l-4 border-purple-400 p-4">
-                  <p className="text-sm text-purple-700">
-                      <strong>Cadastro de Feriados:</strong> Insira aqui as datas que devem ser consideradas feriados. Nesses dias, o sistema usará a "Capacidade Feriado" definida na aba de Técnicos.
-                  </p>
-              </div>
-            <table className="w-full border-collapse text-sm max-w-md">
-              <thead>
-                <tr className="bg-gray-50 text-left">
-                  <th className="border p-2 w-12">#</th>
-                  <th className="border p-2">Data (YYYY-MM-DD)</th>
-                  <th className="border p-2 w-20 text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data.feriados || []).map((dateStr, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="border p-2 text-center text-gray-400">{idx + 1}</td>
-                    <td className="border p-0">
-                      <input 
-                        type="date"
-                        className="w-full p-2 outline-none bg-transparent focus:bg-blue-50"
-                        value={dateStr}
-                        onChange={(e) => handleFeriadoChange(idx, e.target.value)}
-                      />
-                    </td>
-                    <td className="border p-2 text-center">
-                        <button onClick={() => handleDeleteFeriado(idx)} className="text-red-500 hover:text-red-700 font-bold px-2" title="Remover">✕</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={handleAddFeriado} className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2">+ Adicionar Feriado</button>
-          </div>
+        {/* Generic Lists */}
+        {['cidades', 'atividades', 'feriados'].includes(activeTab) && (
+            <div className="space-y-4">
+                 <table className="w-full border-collapse text-sm max-w-lg">
+                    <thead>
+                        <tr className="bg-slate-50 text-left border-b border-slate-100">
+                            <th className="p-3 font-bold text-slate-600 rounded-tl-lg">
+                                {activeTab === 'feriados' ? 'Data (YYYY-MM-DD)' : 'Nome / Valor'}
+                            </th>
+                            <th className="p-3 font-bold text-slate-600 w-24 text-center rounded-tr-lg">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {((data as any)[activeTab] || []).map((item: string, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-50 group">
+                                <td className="p-2">
+                                    <input 
+                                        type={activeTab === 'feriados' ? 'date' : 'text'}
+                                        className="w-full p-2 rounded-md bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none text-slate-700 transition-all"
+                                        value={item}
+                                        onChange={(e) => {
+                                            if(activeTab === 'cidades') handleGlobalCityChange(idx, e.target.value);
+                                            if(activeTab === 'atividades') handleActivityChange(idx, e.target.value);
+                                            if(activeTab === 'feriados') handleFeriadoChange(idx, e.target.value);
+                                        }}
+                                    />
+                                </td>
+                                <td className="p-2 text-center">
+                                    <button 
+                                        onClick={() => {
+                                            if(activeTab === 'cidades') handleDeleteGlobalCity(idx);
+                                            if(activeTab === 'atividades') handleDeleteActivity(idx);
+                                            if(activeTab === 'feriados') handleDeleteFeriado(idx);
+                                        }}
+                                        className="text-slate-300 hover:text-rose-500 font-bold px-2 transition-colors"
+                                    >✕</button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                 </table>
+                 <button 
+                    onClick={() => {
+                        if(activeTab === 'cidades') handleAddGlobalCity();
+                        if(activeTab === 'atividades') handleAddActivity();
+                        if(activeTab === 'feriados') handleAddFeriado();
+                    }}
+                    className="text-indigo-600 font-bold text-sm bg-indigo-50 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors"
+                 >
+                    + Adicionar Item
+                 </button>
+            </div>
+        )}
+
+        {/* Tab Usuários with Password */}
+        {activeTab === 'usuarios' && (
+             <div className="space-y-4">
+                 {!isAdmin ? (
+                     <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 flex gap-3 items-center">
+                         <LockIcon className="w-5 h-5 text-rose-500" />
+                         <p className="text-sm text-rose-800">
+                             <strong>Acesso Restrito:</strong> Apenas o <u>Administrador</u> pode visualizar senhas ou gerenciar outros usuários.
+                         </p>
+                     </div>
+                 ) : (
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-4">
+                        <p className="text-sm text-indigo-800">
+                            <strong>Área Administrativa:</strong> Gerencie aqui os usuários que podem acessar a área de gestão.
+                        </p>
+                    </div>
+                 )}
+                 <table className="w-full border-collapse text-sm max-w-2xl">
+                    <thead>
+                        <tr className="bg-slate-50 text-left border-b border-slate-100">
+                            <th className="p-3 font-bold text-slate-600 rounded-tl-lg">Nome do Usuário</th>
+                            <th className="p-3 font-bold text-slate-600">Senha de Acesso</th>
+                            <th className="p-3 font-bold text-slate-600 w-24 text-center rounded-tr-lg">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {data.usuarios.map((user, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 group">
+                                <td className="p-2">
+                                    <input 
+                                        type="text"
+                                        disabled={!isAdmin}
+                                        className={`w-full p-2 rounded-md bg-transparent outline-none text-slate-700 transition-all font-medium ${isAdmin ? 'focus:bg-white focus:ring-2 focus:ring-indigo-100' : 'cursor-not-allowed opacity-70'}`}
+                                        value={user.nome}
+                                        onChange={(e) => handleUsuarioNameChange(idx, e.target.value)}
+                                        placeholder="Nome do usuário"
+                                    />
+                                </td>
+                                <td className="p-2">
+                                    {isAdmin ? (
+                                        <input 
+                                            type="text"
+                                            className="w-full p-2 rounded-md bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none text-slate-600 transition-all font-mono"
+                                            value={user.senha}
+                                            onChange={(e) => handleUsuarioPassChange(idx, e.target.value)}
+                                            placeholder="Senha"
+                                        />
+                                    ) : (
+                                        <div className="p-2 text-slate-400 font-mono tracking-widest text-sm select-none">••••••</div>
+                                    )}
+                                </td>
+                                <td className="p-2 text-center">
+                                    {isAdmin && (
+                                        <button 
+                                            onClick={() => handleDeleteUsuario(idx)}
+                                            className="text-slate-300 hover:text-rose-500 font-bold px-2 transition-colors"
+                                        >✕</button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                 </table>
+                 {isAdmin && (
+                    <button 
+                        onClick={handleAddUsuario}
+                        className="text-indigo-600 font-bold text-sm bg-indigo-50 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors"
+                    >
+                        + Novo Usuário
+                    </button>
+                 )}
+            </div>
         )}
         
         {activeTab === 'agendamentos' && (
           <div className="space-y-4">
              <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="bg-gray-50 text-left">
-                  <th className="border p-2">Data/Per.</th>
-                  <th className="border p-2">Usuário</th>
-                  <th className="border p-2">Cliente/Téc.</th>
-                  <th className="border p-2">Atividade</th>
-                  <th className="border p-2">Cidade</th>
-                  <th className="border p-2 bg-yellow-50">Status Execução</th>
-                  <th className="border p-2 bg-yellow-50 min-w-[150px]">Motivo</th>
+                <tr className="bg-slate-50 text-left border-b border-slate-100">
+                  <th className="p-3 font-bold text-slate-600">Data</th>
+                  <th className="p-3 font-bold text-slate-600">Usuário</th>
+                  <th className="p-3 font-bold text-slate-600">Cliente / Técnico</th>
+                  <th className="p-3 font-bold text-slate-600">Atividade / Cidade</th>
+                  <th className="p-3 font-bold text-slate-600 bg-amber-50/50">Status</th>
+                  <th className="p-3 font-bold text-slate-600 bg-amber-50/50">Obs. Falha</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {data.agendamentos.map((ag, idx) => (
-                    <tr key={ag.id} className="hover:bg-gray-50">
-                        <td className="border p-2 text-xs">
-                            <div className="font-bold">{ag.data}</div>
-                            <div className="text-gray-500">{ag.periodo}</div>
+                    <tr key={ag.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3">
+                            <div className="font-bold text-slate-700">{ag.data}</div>
+                            <div className="text-xs text-slate-400 font-medium uppercase">{ag.periodo.split(' ')[0]}</div>
                         </td>
-                         <td className="border p-2 text-xs text-gray-600">{ag.nomeUsuario || '-'}</td>
-                        <td className="border p-2 text-xs">
-                            <div>{ag.cliente}</div>
-                            <div className="text-blue-600 font-medium">{ag.tecnicoNome}</div>
+                         <td className="p-3 text-slate-500 font-medium">{ag.nomeUsuario || '-'}</td>
+                        <td className="p-3">
+                            <div className="font-semibold text-slate-800">{ag.cliente}</div>
+                            <div className="text-indigo-600 text-xs mt-0.5">{ag.tecnicoNome}</div>
                         </td>
-                        <td className="border p-2">{ag.atividade || '-'}</td>
-                        <td className="border p-2">{ag.cidade}</td>
-                        <td className="border p-0 bg-yellow-50">
+                        <td className="p-3">
+                            <div className="text-slate-700">{ag.atividade || '-'}</div>
+                            <div className="text-slate-400 text-xs mt-0.5">{ag.cidade}</div>
+                        </td>
+                        <td className="p-1 bg-amber-50/30">
                            <select 
                                 value={ag.statusExecucao || 'Pendente'}
                                 onChange={(e) => handleExecutionStatusChange(idx, e.target.value as StatusExecucao)}
-                                className={`w-full h-full p-2 outline-none bg-transparent font-medium ${
-                                    ag.statusExecucao === 'Concluído' ? 'text-green-700' :
-                                    ag.statusExecucao === 'Não Finalizado' ? 'text-red-700' :
-                                    'text-gray-500'
+                                className={`w-full p-2 bg-transparent rounded-lg outline-none font-bold text-xs border border-transparent focus:bg-white focus:shadow-sm transition-all ${
+                                    ag.statusExecucao === 'Concluído' ? 'text-emerald-600' :
+                                    ag.statusExecucao === 'Não Finalizado' ? 'text-rose-600' :
+                                    'text-amber-600'
                                 }`}
                            >
                                <option value="Pendente">Pendente</option>
@@ -468,10 +533,15 @@ const SheetEditor = () => {
                                <option value="Não Finalizado">Não Finalizado</option>
                            </select>
                         </td>
-                        <td className="border p-0 bg-yellow-50">
+                        <td className="p-1 bg-amber-50/30">
                             {ag.statusExecucao === 'Não Finalizado' ? (
-                                <input className="w-full p-2 outline-none bg-transparent text-red-800" value={ag.motivoNaoConclusao || ''} onChange={(e) => handleMotivoChange(idx, e.target.value)} />
-                            ) : <span className="block p-2 text-gray-300 text-xs text-center">-</span>}
+                                <input 
+                                    className="w-full p-2 text-xs bg-white/50 border border-slate-200 rounded text-rose-700 outline-none focus:ring-1 focus:ring-rose-200" 
+                                    placeholder="Descreva o motivo..."
+                                    value={ag.motivoNaoConclusao || ''} 
+                                    onChange={(e) => handleMotivoChange(idx, e.target.value)} 
+                                />
+                            ) : <span className="block text-center text-slate-300">-</span>}
                         </td>
                     </tr>
                 ))}
@@ -479,52 +549,6 @@ const SheetEditor = () => {
             </table>
           </div>
         )}
-
-        {activeTab === 'cidades' && (
-             <div className="space-y-4">
-            <table className="w-full border-collapse text-sm max-w-md">
-              <thead><tr className="bg-gray-50 text-left"><th className="border p-2">Nome</th><th className="border p-2 w-20">Ações</th></tr></thead>
-              <tbody>
-                {(data.cidades || []).map((city, idx) => (
-                  <tr key={idx}><td className="border p-0"><input className="w-full p-2 outline-none" value={city} onChange={(e) => handleGlobalCityChange(idx, e.target.value)}/></td>
-                  <td className="border p-2 text-center"><button onClick={() => handleDeleteGlobalCity(idx)} className="text-red-500 font-bold">✕</button></td></tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={handleAddGlobalCity} className="text-blue-600 text-sm font-medium">+ Add Cidade</button>
-          </div>
-        )}
-
-        {activeTab === 'atividades' && (
-             <div className="space-y-4">
-            <table className="w-full border-collapse text-sm max-w-md">
-              <thead><tr className="bg-gray-50 text-left"><th className="border p-2">Nome</th><th className="border p-2 w-20">Ações</th></tr></thead>
-              <tbody>
-                {(data.atividades || []).map((ativ, idx) => (
-                  <tr key={idx}><td className="border p-0"><input className="w-full p-2 outline-none" value={ativ} onChange={(e) => handleActivityChange(idx, e.target.value)}/></td>
-                  <td className="border p-2 text-center"><button onClick={() => handleDeleteActivity(idx)} className="text-red-500 font-bold">✕</button></td></tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={handleAddActivity} className="text-blue-600 text-sm font-medium">+ Add Atividade</button>
-          </div>
-        )}
-
-        {activeTab === 'usuarios' && (
-             <div className="space-y-4">
-            <table className="w-full border-collapse text-sm max-w-md">
-              <thead><tr className="bg-gray-50 text-left"><th className="border p-2">Nome</th><th className="border p-2 w-20">Ações</th></tr></thead>
-              <tbody>
-                {(data.usuarios || []).map((user, idx) => (
-                  <tr key={idx}><td className="border p-0"><input className="w-full p-2 outline-none" value={user} onChange={(e) => handleUsuarioChange(idx, e.target.value)}/></td>
-                  <td className="border p-2 text-center"><button onClick={() => handleDeleteUsuario(idx)} className="text-red-500 font-bold">✕</button></td></tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={handleAddUsuario} className="text-blue-600 text-sm font-medium">+ Add Usuário</button>
-          </div>
-        )}
-
       </div>
     </div>
   );

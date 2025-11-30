@@ -1,7 +1,7 @@
 
 export enum Periodo {
-  MANHA = 'Manhã',
-  TARDE = 'Tarde',
+  MANHA = 'Manhã (08:00 às 12:00)',
+  TARDE = 'Tarde (13:00 às 17:00)',
   NOITE = 'Especial (18:00)'
 }
 
@@ -40,13 +40,18 @@ export interface Agendamento {
   motivoNaoConclusao?: string;
 }
 
+export interface Usuario {
+  nome: string;
+  senha: string;
+}
+
 // Representing the "Tabs" of the spreadsheet
 export interface DatabaseSchema {
   tecnicos: Tecnico[];
   agendamentos: Agendamento[];
   atividades: string[];
   cidades: string[]; 
-  usuarios: string[];
+  usuarios: Usuario[]; // Changed from string[] to Usuario[]
   feriados: string[]; // Lista de datas YYYY-MM-DD que são feriados
 }
 
