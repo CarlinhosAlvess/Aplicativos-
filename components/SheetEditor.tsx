@@ -2,16 +2,45 @@
 import React, { useState, useEffect } from 'react';
 import { getSheetData, saveSheetData } from '../services/mockSheetService';
 import { DatabaseSchema, Tecnico, StatusExecucao } from '../types';
-import { SaveIcon, TableIcon } from './Icons';
+import { SaveIcon, TableIcon, LockIcon } from './Icons';
 
 const SheetEditor = () => {
   const [data, setData] = useState<DatabaseSchema | null>(null);
   const [activeTab, setActiveTab] = useState<'tecnicos' | 'agendamentos' | 'atividades' | 'cidades' | 'usuarios' | 'feriados'>('tecnicos');
   const [newCityInput, setNewCityInput] = useState<{techIndex: number, value: string} | null>(null);
 
+  // Auth State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginError, setLoginError] = useState('');
+
   useEffect(() => {
     setData(getSheetData());
   }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Simulação de autenticação simples
+    // Apenas 'Administrador' e 'Gerente' podem acessar
+    // Senha padrão para teste: 1234
+    
+    if (!data) return;
+
+    // Lista de cargos permitidos a editar a planilha
+    const allowedRoles = ['administrador', 'gerente', 'coordenador'];
+    const userRole = loginUser.toLowerCase();
+    
+    // Verifica se o usuário digitado contém alguma das palavras chave (ex: 'Administrador')
+    const isAllowedUser = allowedRoles.some(role => userRole.includes(role));
+
+    if (isAllowedUser && loginPass === '1234') {
+        setIsAuthenticated(true);
+        setLoginError('');
+    } else {
+        setLoginError('Acesso negado. Verifique usuário e senha.');
+    }
+  };
 
   const handleTechChange = (index: number, field: keyof Tecnico, value: string | number) => {
     if (!data) return;
@@ -178,6 +207,62 @@ const SheetEditor = () => {
 
   if (!data) return <div>Carregando planilha...</div>;
 
+  // --- LOGIN SCREEN ---
+  if (!isAuthenticated) {
+      return (
+          <div className="flex flex-col items-center justify-center h-[500px] bg-white rounded-xl shadow-lg border border-gray-200">
+              <div className="bg-gray-100 p-8 rounded-2xl shadow-sm text-center max-w-sm w-full">
+                  <div className="flex justify-center mb-4">
+                      <div className="bg-indigo-100 p-4 rounded-full">
+                        <LockIcon className="w-8 h-8 text-indigo-600" />
+                      </div>
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-800 mb-2">Área Restrita</h2>
+                  <p className="text-sm text-gray-500 mb-6">Esta área é exclusiva para gestão. Identifique-se para continuar.</p>
+                  
+                  <form onSubmit={handleLogin} className="space-y-4">
+                      <div className="text-left">
+                          <label className="block text-xs font-bold text-gray-700 mb-1">Usuário Autorizado</label>
+                          <select 
+                             className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                             value={loginUser}
+                             onChange={(e) => setLoginUser(e.target.value)}
+                             required
+                          >
+                              <option value="">Selecione...</option>
+                              {(data.usuarios || []).map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                      </div>
+                      <div className="text-left">
+                          <label className="block text-xs font-bold text-gray-700 mb-1">Senha de Acesso</label>
+                          <input 
+                            type="password" 
+                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="Digite a senha"
+                            value={loginPass}
+                            onChange={(e) => setLoginPass(e.target.value)}
+                            required
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">Dica para teste: Senha é 1234</p>
+                      </div>
+                      
+                      {loginError && (
+                          <div className="text-red-500 text-xs font-bold bg-red-50 p-2 rounded">
+                              {loginError}
+                          </div>
+                      )}
+
+                      <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded hover:bg-indigo-700 transition">
+                          Acessar Planilha
+                      </button>
+                  </form>
+              </div>
+          </div>
+      );
+  }
+
+  // --- EDITOR CONTENT (Apenas aparece se isAuthenticated === true) ---
+
   const tabClass = (tab: string) => `px-4 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap ${
     activeTab === tab 
       ? 'bg-white text-green-800 border-t border-x border-gray-300 shadow-sm relative top-[1px]' 
@@ -191,13 +276,16 @@ const SheetEditor = () => {
           <TableIcon className="w-6 h-6" />
           <span className="font-semibold text-lg">Google Sheets (Simulação)</span>
         </div>
-        <button 
-            onClick={handleSave}
-            className="bg-white text-green-700 px-4 py-1.5 rounded font-bold text-sm hover:bg-green-50 transition flex items-center gap-2"
-        >
-            <SaveIcon className="w-4 h-4" />
-            Salvar Alterações
-        </button>
+        <div className="flex items-center gap-3">
+             <span className="text-xs bg-green-800 px-2 py-1 rounded text-green-100">Logado como: {loginUser}</span>
+            <button 
+                onClick={handleSave}
+                className="bg-white text-green-700 px-4 py-1.5 rounded font-bold text-sm hover:bg-green-50 transition flex items-center gap-2"
+            >
+                <SaveIcon className="w-4 h-4" />
+                Salvar Alterações
+            </button>
+        </div>
       </div>
 
       <div className="bg-gray-100 border-b border-gray-300 flex px-2 pt-2 gap-1 overflow-x-auto">
@@ -335,12 +423,9 @@ const SheetEditor = () => {
             <button onClick={handleAddFeriado} className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2">+ Adicionar Feriado</button>
           </div>
         )}
-
-        {/* --- Outras abas (Agendamentos, Cidades, Atividades, Usuários) mantidas idênticas, apenas renderizadas condicionalmente --- */}
         
         {activeTab === 'agendamentos' && (
           <div className="space-y-4">
-             {/* ... conteúdo existente da tabela de agendamentos ... */}
              <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">

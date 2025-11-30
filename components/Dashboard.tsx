@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { getSheetData, getUniqueCities } from '../services/mockSheetService';
 import { DatabaseSchema, StatusExecucao } from '../types';
@@ -143,8 +142,8 @@ const Dashboard = () => {
     });
     
     const listaCidades = (Object.values(cidadesStats) as CityStats[]).sort((a: CityStats, b: CityStats) => {
-        const satA = a.agendamentos / (a.capacidadeDiaria || 1);
-        const satB = b.agendamentos / (b.capacidadeDiaria || 1);
+        const satA = Number(a.agendamentos) / (Number(a.capacidadeDiaria) || 1);
+        const satB = Number(b.agendamentos) / (Number(b.capacidadeDiaria) || 1);
         return satB - satA;
     });
 
@@ -162,10 +161,10 @@ const Dashboard = () => {
     
     // Converte de volta para array e capitaliza para exibição
     const chartMotivos = Object.entries(motivosStats)
-        .sort((a, b) => b[1] - a[1])
+        .sort((a, b) => (b[1] as number) - (a[1] as number))
         .map(([key, qtd]) => ({ 
             motivo: key.charAt(0).toUpperCase() + key.slice(1), // Capitaliza primeira letra
-            qtd 
+            qtd: Number(qtd)
         }));
 
     // --- GERADOR DE INSIGHTS AUTOMÁTICOS ---
@@ -195,7 +194,7 @@ const Dashboard = () => {
     const countFailuresByKeyword = (keywords: string[]) => {
         return chartMotivos
             .filter(m => keywords.some(k => m.motivo.toLowerCase().includes(k)))
-            .reduce((sum, m) => sum + m.qtd, 0);
+            .reduce((sum: number, m) => sum + m.qtd, 0);
     };
 
     // 1. Melhoria de Logística
