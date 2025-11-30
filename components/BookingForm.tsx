@@ -115,33 +115,34 @@ const BookingForm = () => {
 
   const selectedTechData = availableTechs.find(t => t.id === tecnicoId);
 
-  // Helper styles
-  const inputClass = "w-full px-4 py-3.5 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all placeholder:text-slate-400 text-slate-700 font-medium";
-  const labelClass = "block text-sm font-semibold text-slate-700 mb-1.5 ml-1";
+  // Helper styles - Inputs mais compactos (py-2.5) e texto menor (text-sm)
+  const inputClass = "w-full px-3 py-2.5 rounded-lg bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all placeholder:text-slate-400 text-slate-700 font-medium text-sm";
+  const labelClass = "block text-xs font-bold text-slate-600 mb-1 ml-1 uppercase tracking-wide";
 
   return (
-    <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden max-w-2xl mx-auto relative">
-      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 to-violet-500"></div>
+    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden max-w-2xl mx-auto relative">
+      <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 to-violet-500"></div>
 
-      <div className="p-10">
+      {/* Padding reduzido no mobile (p-5) e normal no desktop (sm:p-10) */}
+      <div className="p-5 sm:p-10">
         {successMessage ? (
-          <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-8 text-center animate-fade-in flex flex-col items-center">
-            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-sm">
-               <SparklesIcon className="w-10 h-10 text-emerald-600" />
+          <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 sm:p-8 text-center animate-fade-in flex flex-col items-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-sm">
+               <SparklesIcon className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-600" />
             </div>
-            <h3 className="text-2xl font-bold text-emerald-900 mb-2 tracking-tight">Agendamento Realizado!</h3>
-            <p className="text-emerald-700/80 mb-8 whitespace-pre-line leading-relaxed max-w-sm">{successMessage}</p>
+            <h3 className="text-xl sm:text-2xl font-bold text-emerald-900 mb-2 tracking-tight">Agendamento Realizado!</h3>
+            <p className="text-sm sm:text-base text-emerald-700/80 mb-8 whitespace-pre-line leading-relaxed max-w-sm">{successMessage}</p>
             <button 
               onClick={() => setSuccessMessage(null)}
-              className="bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 font-bold transform hover:-translate-y-0.5"
+              className="bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 font-bold transform hover:-translate-y-0.5 w-full sm:w-auto"
             >
               Novo Agendamento
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-8">
+          <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
             
-            <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className={labelClass}>Nome do Cliente</label>
                   <input
@@ -155,7 +156,7 @@ const BookingForm = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Telefone</label>
                 <input
@@ -181,7 +182,7 @@ const BookingForm = () => {
                     <option value="">Selecione...</option>
                     {cities.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                  <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-500">
                     <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
                   </div>
                 </div>
@@ -200,43 +201,44 @@ const BookingForm = () => {
                       <option value="">Selecione a atividade...</option>
                       {availableActivities.map(ativ => <option key={ativ} value={ativ}>{ativ}</option>)}
                     </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                    <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-500">
                         <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
                     </div>
                 </div>
             </div>
 
-            <div className="p-6 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label className={labelClass}>Data da Visita</label>
-                    <input
-                    type="date"
-                    required
-                    min={minDate}
-                    value={data}
-                    onChange={(e) => setData(e.target.value)}
-                    className={inputClass}
-                    />
-                </div>
+            <div className="p-4 sm:p-6 bg-slate-50/80 rounded-xl border border-slate-100 space-y-4">
+                {/* Lógica: grid-cols-2 sempre (mesmo no mobile) para ficarem lado a lado */}
+                <div className="grid grid-cols-2 gap-3 sm:gap-6">
+                    <div>
+                        <label className={labelClass}>Data</label>
+                        <input
+                        type="date"
+                        required
+                        min={minDate}
+                        value={data}
+                        onChange={(e) => setData(e.target.value)}
+                        className={`${inputClass} min-w-0`} // min-w-0 evita overflow
+                        />
+                    </div>
 
-                <div>
-                    <label className={labelClass}>Período</label>
-                    <div className="relative">
-                    <select
-                        value={periodo}
-                        onChange={(e) => setPeriodo(e.target.value as Periodo)}
-                        className={`${inputClass} appearance-none`}
-                    >
-                        <option value={Periodo.MANHA}>☀️ Manhã (08:00 às 12:00)</option>
-                        <option value={Periodo.TARDE}>🌤️ Tarde (13:00 às 17:00)</option>
-                        <option value={Periodo.NOITE}>🌙 Especial (18:00) - Fechamento</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
-                        <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                    <div>
+                        <label className={labelClass}>Período</label>
+                        <div className="relative">
+                        <select
+                            value={periodo}
+                            onChange={(e) => setPeriodo(e.target.value as Periodo)}
+                            className={`${inputClass} appearance-none pr-8 text-xs sm:text-sm`} // Texto menor no mobile
+                        >
+                            <option value={Periodo.MANHA}>Manhã (08-12h)</option>
+                            <option value={Periodo.TARDE}>Tarde (13-17h)</option>
+                            <option value={Periodo.NOITE}>Especial (18h)</option>
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 sm:px-3 pointer-events-none text-slate-500">
+                            <svg className="w-3 h-3 sm:w-4 sm:h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                        </div>
+                        </div>
                     </div>
-                    </div>
-                </div>
                 </div>
 
                 <div>
@@ -253,10 +255,10 @@ const BookingForm = () => {
                         >
                             <option value="">
                             {!cidade || !data 
-                                ? 'Aguardando data e cidade...' 
+                                ? 'Aguardando data/local...' 
                                 : availableTechs.length === 0 
-                                ? '⚠️ Nenhum técnico disponível' 
-                                : 'Selecione o técnico disponível...'}
+                                ? '⚠️ Indisponível' 
+                                : 'Selecione o técnico...'}
                             </option>
                             {availableTechs.map(tech => (
                             <option key={tech.id} value={tech.id}>
@@ -264,18 +266,18 @@ const BookingForm = () => {
                             </option>
                             ))}
                         </select>
-                         <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                         <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-500">
                             <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
                         </div>
                     </div>
                     
                     {tecnicoId && selectedTechData && (
-                        <div className="flex items-center gap-2 mt-3 animate-fade-in bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
-                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-300"></div>
-                            <span className="text-emerald-800 font-semibold text-sm">
+                        <div className="flex items-center gap-2 mt-2 animate-fade-in bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-300"></div>
+                            <span className="text-emerald-800 font-semibold text-xs">
                                 {periodo === Periodo.NOITE 
                                 ? "Vaga Única (Fechamento)" 
-                                : `${selectedTechData.vagasRestantes} ${selectedTechData.vagasRestantes === 1 ? 'vaga restante' : 'vagas disponíveis'}`
+                                : `${selectedTechData.vagasRestantes} ${selectedTechData.vagasRestantes === 1 ? 'vaga' : 'vagas'}`
                                 }
                             </span>
                         </div>
@@ -284,7 +286,7 @@ const BookingForm = () => {
             </div>
 
             <div>
-              <label className={labelClass}>Quem está agendando?</label>
+              <label className={labelClass}>Agendado por</label>
               <input
                 type="text"
                 required
@@ -298,7 +300,7 @@ const BookingForm = () => {
                          setUserError('Usuário não encontrado.');
                      }
                 }}
-                placeholder="Digite seu nome cadastrado"
+                placeholder="Seu nome"
                 className={`${inputClass} ${
                     userError 
                     ? 'ring-2 ring-red-200 bg-red-50 text-red-700' 
@@ -306,8 +308,8 @@ const BookingForm = () => {
                 }`}
               />
               {userError && (
-                  <div className="flex items-center gap-2 text-red-500 text-xs font-semibold mt-2 animate-pulse bg-red-50 w-fit px-3 py-1 rounded-full">
-                      <AlertIcon className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-2 text-red-500 text-[10px] sm:text-xs font-semibold mt-2 animate-pulse bg-red-50 w-fit px-3 py-1 rounded-full">
+                      <AlertIcon className="w-3 h-3" />
                       <span>{userError}</span>
                   </div>
               )}
@@ -316,24 +318,24 @@ const BookingForm = () => {
             <button
               type="submit"
               disabled={isSubmitting || !tecnicoId || !!userError}
-              className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-0.5 ${
+              className={`w-full py-3.5 rounded-xl font-bold text-base sm:text-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-0.5 ${
                 isSubmitting || !tecnicoId || !!userError
                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' 
                   : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white'
               }`}
             >
               {isSubmitting ? (
-                <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <span className="flex items-center gap-2 text-sm">
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Confirmando...
+                    Processando...
                 </span>
               ) : (
                 <>
                   <SaveIcon className="w-5 h-5" />
-                  CONFIRMAR AGENDAMENTO
+                  CONFIRMAR
                 </>
               )}
             </button>
