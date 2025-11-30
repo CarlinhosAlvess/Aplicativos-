@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { getAvailableTechnicians, getUniqueCities, addAgendamento, getAtividades, getUsuarios } from '../services/mockSheetService';
+import { getAvailableTechnicians, getUniqueCities, addAgendamento, getAtividades, getUsuarios, getAvailablePeriods } from '../services/mockSheetService';
 import { Agendamento, Periodo, TecnicoDisponivel } from '../types';
 import { CalendarIcon, SaveIcon, SparklesIcon, AlertIcon } from './Icons';
 
@@ -9,6 +9,9 @@ const BookingForm = () => {
   const [availableActivities, setAvailableActivities] = useState<string[]>([]);
   const [availableTechs, setAvailableTechs] = useState<TecnicoDisponivel[]>([]);
   const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
+  
+  // New state for dynamic period filtering
+  const [availablePeriods, setAvailablePeriods] = useState<Periodo[]>([]);
   
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -35,15 +38,36 @@ const BookingForm = () => {
     setAllowedUsers(getUsuarios());
   }, []);
 
+  // Update available periods when city or data changes
+  useEffect(() => {
+    if (cidade && data) {
+        const validPeriods = getAvailablePeriods(cidade, data);
+        setAvailablePeriods(validPeriods);
+        
+        // If the currently selected period is not valid (full), switch to the first available one
+        if (validPeriods.length > 0 && !validPeriods.includes(periodo)) {
+            setPeriodo(validPeriods[0]);
+        }
+    } else {
+        // Reset or show default if no city/date selected
+        setAvailablePeriods([Periodo.MANHA, Periodo.TARDE, Periodo.NOITE]);
+    }
+  }, [cidade, data]);
+
   useEffect(() => {
     setTecnicoId('');
     if (cidade && data) {
-      const techs = getAvailableTechnicians(cidade, data, periodo);
-      setAvailableTechs(techs);
+      // Only fetch techs if the period is actually valid
+      if (availablePeriods.includes(periodo)) {
+        const techs = getAvailableTechnicians(cidade, data, periodo);
+        setAvailableTechs(techs);
+      } else {
+        setAvailableTechs([]);
+      }
     } else {
       setAvailableTechs([]);
     }
-  }, [cidade, data, periodo]);
+  }, [cidade, data, periodo, availablePeriods]);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, ""); // Remove tudo que não é dígito
@@ -228,11 +252,27 @@ const BookingForm = () => {
                         <select
                             value={periodo}
                             onChange={(e) => setPeriodo(e.target.value as Periodo)}
-                            className={`${inputClass} appearance-none pr-8 text-xs sm:text-sm`} // Texto menor no mobile
+                            disabled={!cidade || !data || availablePeriods.length === 0}
+                            className={`${inputClass} appearance-none pr-8 text-xs sm:text-sm ${
+                                (!cidade || !data) ? 'bg-slate-100 text-slate-400' : ''
+                            }`} 
                         >
-                            <option value={Periodo.MANHA}>Manhã (08-12h)</option>
-                            <option value={Periodo.TARDE}>Tarde (13-17h)</option>
-                            <option value={Periodo.NOITE}>Especial (18h)</option>
+                            {/* Se não escolheu cidade/data, mostra um placeholder */}
+                            {(!cidade || !data) && <option value="">Defina data/local</option>}
+                            
+                            {/* Se escolheu, mas não tem nada livre */}
+                            {(cidade && data && availablePeriods.length === 0) && (
+                                <option value="">Dia Lotado</option>
+                            )}
+
+                            {/* Mostra apenas períodos com vaga */}
+                            {availablePeriods.map(p => (
+                                <option key={p} value={p}>
+                                    {p === Periodo.MANHA ? 'Manhã (08-12h)' : 
+                                     p === Periodo.TARDE ? 'Tarde (13-17h)' : 
+                                     'Especial (18h)'}
+                                </option>
+                            ))}
                         </select>
                         <div className="absolute inset-y-0 right-0 flex items-center px-2 sm:px-3 pointer-events-none text-slate-500">
                             <svg className="w-3 h-3 sm:w-4 sm:h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
@@ -248,17 +288,17 @@ const BookingForm = () => {
                             required
                             value={tecnicoId}
                             onChange={(e) => setTecnicoId(e.target.value)}
-                            disabled={!cidade || !data}
+                            disabled={!cidade || !data || availablePeriods.length === 0}
                             className={`${inputClass} appearance-none ${
-                            (!cidade || !data) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''
+                            (!cidade || !data || availablePeriods.length === 0) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''
                             }`}
                         >
                             <option value="">
                             {!cidade || !data 
                                 ? 'Aguardando data/local...' 
                                 : availableTechs.length === 0 
-                                ? '⚠️ Indisponível' 
-                                : 'Selecione o técnico...'}
+                                    ? (availablePeriods.length === 0 ? '⛔ Dia Lotado' : '⚠️ Indisponível neste horário')
+                                    : 'Selecione o técnico...'}
                             </option>
                             {availableTechs.map(tech => (
                             <option key={tech.id} value={tech.id}>

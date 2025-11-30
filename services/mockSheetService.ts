@@ -222,6 +222,20 @@ export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo
   }).filter(tech => tech.vagasRestantes > 0);
 };
 
+// Verifica quais períodos têm pelo menos um técnico disponível
+export const getAvailablePeriods = (cidade: string, dataStr: string): Periodo[] => {
+    if (!cidade || !dataStr) return [];
+    
+    // Lista fixa de todos os períodos possíveis
+    const allPeriods = [Periodo.MANHA, Periodo.TARDE, Periodo.NOITE];
+    
+    // Filtra apenas os períodos onde getAvailableTechnicians retorna > 0
+    return allPeriods.filter(p => {
+        const techs = getAvailableTechnicians(cidade, dataStr, p);
+        return techs.length > 0;
+    });
+};
+
 export const getUniqueCities = (): string[] => {
   const db = getSheetData();
   return db.cidades || [];
