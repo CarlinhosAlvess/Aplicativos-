@@ -8,6 +8,23 @@ import { loadFromCloud, saveToCloud } from './services/cloudService';
 import { getSheetData, setFullData, removeAgendamento, confirmarPreAgendamento, expirePreBookings, addLog, getUniqueCities } from './services/mockSheetService';
 import { UserProfile } from './types';
 
+// --- BRANDING COMPONENT ---
+const BravoLogo = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <linearGradient id="bravo_gradient" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#4F46E5" /> {/* Indigo 600 */}
+        <stop offset="1" stopColor="#0F172A" /> {/* Slate 900 */}
+      </linearGradient>
+    </defs>
+    <rect width="100" height="100" rx="28" fill="url(#bravo_gradient)" />
+    {/* Stylized 'B' / Lightning shape */}
+    <path d="M35 28H58C68 28 72 32 72 40C72 47 67 50 60 50H45L40 75H30L35 28Z" fill="white" fillOpacity="0.9" />
+    <path d="M72 40C72 44 70 50 60 50M60 50L65 50C75 50 80 55 80 65C80 75 72 80 60 80H42" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.3" />
+    <circle cx="75" cy="25" r="6" fill="#F59E0B" /> {/* Amber Dot for 'Alert/Speed' */}
+  </svg>
+);
+
 // Componente simples de Toast para notificação
 const Toast = ({ title, message, type, onAction, actionLabel, onClose }: { title: string, message: string, type: 'warning' | 'error', onAction?: () => void, actionLabel?: string, onClose: () => void }) => (
     <div className={`fixed bottom-4 right-4 z-[100] max-w-sm w-[90%] mx-auto sm:w-full bg-white rounded-xl shadow-2xl border-l-4 p-4 animate-fade-in-up ${type === 'warning' ? 'border-amber-500' : 'border-rose-500'}`}>
@@ -49,7 +66,6 @@ const playNotificationSound = (type: 'warning' | 'error') => {
 
         if (type === 'warning') {
             // Som de "Carrilhão" / Atenção (Dois tons harmônicos)
-            // Tom 1: Mais agudo (A5)
             const osc1 = ctx.createOscillator();
             const gain1 = ctx.createGain();
             osc1.connect(gain1);
@@ -58,22 +74,20 @@ const playNotificationSound = (type: 'warning' | 'error') => {
             osc1.type = 'sine';
             osc1.frequency.setValueAtTime(880, ctx.currentTime); 
             
-            // Envelope ADSR suave
             gain1.gain.setValueAtTime(0, ctx.currentTime);
-            gain1.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05); // Attack
-            gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5); // Decay
+            gain1.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+            gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
             
             osc1.start(ctx.currentTime);
             osc1.stop(ctx.currentTime + 0.6);
 
-            // Tom 2: Um pouco mais grave e atrasado (E5)
             const osc2 = ctx.createOscillator();
             const gain2 = ctx.createGain();
             osc2.connect(gain2);
             gain2.connect(masterGain);
             
             osc2.type = 'sine';
-            osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.15); // Atraso de 150ms
+            osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.15);
             
             gain2.gain.setValueAtTime(0, ctx.currentTime + 0.15);
             gain2.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.2);
@@ -83,15 +97,14 @@ const playNotificationSound = (type: 'warning' | 'error') => {
             osc2.stop(ctx.currentTime + 0.8);
 
         } else {
-            // Som de "Falha" / "Power Down" (Dente de serra descendente)
+            // Som de "Falha" / "Power Down"
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain);
             gain.connect(masterGain);
 
-            osc.type = 'sawtooth'; // Som mais "áspero"
+            osc.type = 'sawtooth';
             
-            // Slide de frequência para baixo (efeito de desligar)
             osc.frequency.setValueAtTime(150, ctx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.4);
 
@@ -102,7 +115,6 @@ const playNotificationSound = (type: 'warning' | 'error') => {
             osc.stop(ctx.currentTime + 0.5);
         }
 
-        // Importante: Fechar o contexto após o uso para liberar recursos do navegador
         setTimeout(() => {
             if (ctx.state !== 'closed') {
                 ctx.close();
@@ -139,16 +151,12 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
   
-  // Ref para controlar status de sincronia dentro de listeners de eventos
   const isSyncingRef = useRef(false);
 
   // Estados de notificação
   const [notification, setNotification] = useState<{id: string, title: string, message: string, type: 'warning' | 'error', actionId?: string} | null>(null);
-  
-  // Ref para rastrear quais notificações já foram disparadas
   const notifiedIds = useRef<Set<string>>(new Set());
 
-  // Check session on load
   useEffect(() => {
       const savedSession = sessionStorage.getItem('app_global_session');
       if (savedSession) {
@@ -164,7 +172,6 @@ function App() {
       e.preventDefault();
       const db = getSheetData();
       
-      // Busca exata pelo nome (case sensitive pode ser ajustado se necessário)
       const user = db.usuarios.find(u => u.nome === loginUser);
 
       if (user && user.senha === loginPass) {
@@ -172,9 +179,7 @@ function App() {
           setCurrentUser(session);
           sessionStorage.setItem('app_global_session', JSON.stringify(session));
           setLoginError('');
-          // Redirect to form on login
           setView('form');
-          // Log login
           addLog(user.nome, 'Login', 'Usuário acessou o sistema');
       } else {
           setLoginError('Credenciais inválidas.');
@@ -192,7 +197,6 @@ function App() {
       setView('form');
   }
 
-  // Função auxiliar de sync
   const handleSync = async (url: string, forceUpload: boolean = false) => {
       if (!url) return;
       setIsSyncing(true);
@@ -200,16 +204,13 @@ function App() {
       
       try {
         if (forceUpload) {
-            // Envia dados locais para nuvem
             const localData = getSheetData();
             await saveToCloud(url, localData);
         } else {
-            // Baixa da nuvem
             const cloudData = await loadFromCloud(url);
             if (cloudData) {
                 setFullData(cloudData);
             } else {
-                // Se falhar o load (ex: script vazio), faz upload inicial
                 const localData = getSheetData();
                 await saveToCloud(url, localData);
             }
@@ -219,28 +220,22 @@ function App() {
           console.error(e);
       } finally {
           setIsSyncing(false);
-          // Pequeno delay para liberar a trava, garantindo que eventos residuais não disparem upload
           setTimeout(() => { isSyncingRef.current = false; }, 500);
       }
   };
 
   useEffect(() => {
-    // Solicitar permissão de notificação ao iniciar
     if ("Notification" in window && Notification.permission !== "granted") {
         Notification.requestPermission();
     }
 
-    // Carrega URL salva
     const savedUrl = localStorage.getItem('app_cloud_url');
     if (savedUrl) {
         setCloudUrl(savedUrl);
-        // Tenta sincronizar ao abrir se tiver URL
         handleSync(savedUrl, false); 
     }
 
-    // Escuta mudanças locais para salvar na nuvem (se configurado)
     const handleLocalChange = () => {
-        // IMPORTANTE: Se estamos no meio de um download da nuvem, NÃO faça upload de volta.
         if (isSyncingRef.current) return;
 
         const currentUrl = localStorage.getItem('app_cloud_url');
@@ -256,12 +251,10 @@ function App() {
 
     window.addEventListener('localDataChanged', handleLocalChange);
     
-    // --- Lógica de Verificação de Pré-Agendamento ---
     const checkPreBookings = () => {
         const data = getSheetData();
         const now = Date.now();
         
-        // 1. Verificação de AVISO (29 minutos) - Apenas leitura
         data.agendamentos.forEach(ag => {
             if (ag.tipo === 'PRE_AGENDAMENTO' && ag.criadoEm) {
                 const createdTime = new Date(ag.criadoEm).getTime();
@@ -270,12 +263,10 @@ function App() {
                 
                 const warningKey = `${ag.id}-warning`;
 
-                // 29 minutos: Avisar (1 minuto antes de expirar)
                 if (diffMinutes >= 29 && diffMinutes < 30) {
-                    // Se ainda não notificamos este aviso
                     if (!notifiedIds.current.has(warningKey)) {
                         const title = "Pré-Agendamento Expirando!";
-                        const msg = `A reserva de ${ag.cliente} expira em menos de 1 minuto. Confirme agora para não perder a vaga.`;
+                        const msg = `A reserva de ${ag.cliente} expira em menos de 1 minuto.`;
                         
                         setNotification({
                             id: Date.now().toString(),
@@ -293,13 +284,12 @@ function App() {
             }
         });
 
-        // 2. Verificação de EXPIRAÇÃO (30 minutos) - Executa limpeza em lote via serviço
         const expiredItems = expirePreBookings();
         
         if (expiredItems.length > 0) {
              expiredItems.forEach(ag => {
                 const title = "Reserva Expirada";
-                const msg = `O pré-agendamento de ${ag.cliente} foi cancelado automaticamente por exceder 30 minutos.`;
+                const msg = `O pré-agendamento de ${ag.cliente} foi cancelado automaticamente.`;
                 
                 setNotification({
                     id: Date.now().toString(),
@@ -314,11 +304,8 @@ function App() {
         }
     };
 
-    // Robô de Verificação (Pré-agendamentos) e Sincronização Automática
     const intervalId = setInterval(() => {
         checkPreBookings();
-        
-        // Auto-Sync (Polling) a cada ciclo (10s)
         const currentUrl = localStorage.getItem('app_cloud_url');
         if (currentUrl && !isSyncingRef.current) {
             handleSync(currentUrl, false);
@@ -352,31 +339,42 @@ function App() {
   // --- LOGIN SCREEN ---
   if (!currentUser) {
       return (
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-               <div className="flex flex-col items-center justify-center w-full max-w-md bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-8 sm:p-10">
-                  <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-2xl shadow-lg shadow-indigo-200 mb-6">
-                    A
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
+               {/* Background decoration */}
+               <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
+                   <svg width="100%" height="100%">
+                       <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                           <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1"/>
+                       </pattern>
+                       <rect width="100%" height="100%" fill="url(#grid)" />
+                   </svg>
+               </div>
+
+               <div className="flex flex-col items-center justify-center w-full max-w-md bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-300/60 border border-white/50 p-8 sm:p-12 z-10">
+                  <div className="mb-6 transform hover:scale-105 transition-transform duration-500">
+                    <BravoLogo className="w-24 h-24 drop-shadow-xl" />
                   </div>
-                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Bem-vindo</h2>
-                  <p className="text-sm text-slate-500 mb-8 font-light text-center">Entre com suas credenciais para acessar o sistema.</p>
+                  
+                  <h1 className="text-3xl font-extrabold text-slate-900 mb-1 tracking-tight">Bravo</h1>
+                  <p className="text-xs text-indigo-500 font-bold uppercase tracking-widest mb-8">Gestão de Visitas</p>
                   
                   <form onSubmit={handleLogin} className="space-y-5 w-full">
-                      <div className="text-left">
-                          <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Usuário</label>
+                      <div className="text-left group">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">Usuário</label>
                           <input 
                              type="text"
-                             className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700 font-medium transition-all"
-                             placeholder="Digite seu usuário"
+                             className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-slate-700 font-medium transition-all"
+                             placeholder="Seu usuário de acesso"
                              value={loginUser}
                              onChange={(e) => setLoginUser(e.target.value)}
                              required
                           />
                       </div>
-                      <div className="text-left">
-                          <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Senha</label>
+                      <div className="text-left group">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wide group-focus-within:text-indigo-600 transition-colors">Senha</label>
                           <input 
                             type="password" 
-                            className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700 font-medium transition-all"
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-slate-700 font-medium transition-all"
                             placeholder="••••••"
                             value={loginPass}
                             onChange={(e) => setLoginPass(e.target.value)}
@@ -385,17 +383,18 @@ function App() {
                       </div>
                       
                       {loginError && (
-                          <div className="text-rose-600 text-xs font-bold bg-rose-50 p-3 rounded-lg border border-rose-100 text-center">
+                          <div className="text-rose-600 text-xs font-bold bg-rose-50 p-3 rounded-xl border border-rose-100 text-center flex items-center justify-center gap-2">
+                              <AlertIcon className="w-4 h-4" />
                               {loginError}
                           </div>
                       )}
 
-                      <button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition shadow-lg shadow-slate-200">
-                          Entrar no Sistema
+                      <button type="submit" className="w-full bg-slate-900 hover:bg-indigo-600 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/30 transform active:scale-95 mt-4">
+                          Acessar Plataforma
                       </button>
                   </form>
-                  <p className="mt-8 text-xs text-slate-400 text-center max-w-xs">
-                      Se você esqueceu sua senha, contate o administrador da planilha.
+                  <p className="mt-8 text-[10px] text-slate-400 text-center">
+                      © 2025 Bravo Systems. Todos os direitos reservados.
                   </p>
                </div>
           </div>
@@ -407,7 +406,6 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 relative font-sans">
       
-      {/* Toast Notification Area */}
       {notification && (
           <Toast 
             title={notification.title} 
@@ -419,7 +417,6 @@ function App() {
           />
       )}
 
-      {/* Modal de Configuração da Nuvem */}
       {showCloudModal && (
           <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg animate-fade-in-up">
@@ -448,28 +445,31 @@ function App() {
           <div className="flex justify-between h-16 sm:h-20 items-center">
             
             {/* Logo Section */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center font-bold text-base sm:text-lg shadow-lg shadow-indigo-200">
-                A
-              </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-base sm:text-xl tracking-tight text-slate-800 leading-tight">
-                  Agendamento
+            <div className="flex items-center gap-3 shrink-0">
+              <BravoLogo className="w-8 h-8 sm:w-10 sm:h-10 shadow-sm rounded-lg" />
+              <div className="flex flex-col justify-center">
+                <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 leading-none">
+                  Bravo
                 </span>
-                <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-slate-400 font-semibold hidden sm:inline-block">
-                  {currentUser.nome} • {isAdmin ? 'Admin' : 'User'}
+                <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500 leading-none mt-0.5">
+                    Gestão
                 </span>
               </div>
             </div>
             
             {/* Navigation Buttons */}
             <div className="flex items-center gap-1 sm:gap-2">
+              <div className="hidden md:flex flex-col items-end mr-4 border-r border-slate-100 pr-4">
+                 <span className="text-xs font-bold text-slate-700">{currentUser.nome}</span>
+                 <span className="text-[10px] text-slate-400 uppercase">{isAdmin ? 'Administrador' : 'Usuário'}</span>
+              </div>
+
               <button
                 onClick={() => setView('form')}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                   view === 'form' 
-                  ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+                  ? 'bg-slate-900 text-white shadow-md shadow-slate-200' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
                 <EditIcon className="w-5 h-5 sm:w-4 sm:h-4" />
@@ -480,8 +480,8 @@ function App() {
                 onClick={() => setView('dashboard')}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                   view === 'dashboard' 
-                  ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+                  ? 'bg-slate-900 text-white shadow-md shadow-slate-200' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
                 <ChartIcon className="w-5 h-5 sm:w-4 sm:h-4" />
@@ -493,10 +493,10 @@ function App() {
                 disabled={!isAdmin}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                     !isAdmin 
-                    ? 'opacity-50 cursor-not-allowed text-slate-400 bg-slate-50'
+                    ? 'opacity-50 cursor-not-allowed text-slate-400'
                     : view === 'sheet' 
-                        ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' 
-                        : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+                        ? 'bg-slate-900 text-white shadow-md shadow-slate-200' 
+                        : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
                 title={!isAdmin ? "Acesso restrito a administradores" : "Planilha"}
               >
@@ -504,14 +504,13 @@ function App() {
                 <span className="hidden sm:inline">Planilha</span>
               </button>
 
-              <div className="ml-2 pl-2 border-l border-slate-200">
-                  <button 
-                    onClick={handleLogout}
-                    className="text-xs font-bold text-slate-400 hover:text-rose-600 uppercase tracking-wide px-2 py-1"
-                  >
-                      Sair
-                  </button>
-              </div>
+              <button 
+                onClick={handleLogout}
+                className="ml-1 p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                title="Sair"
+              >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              </button>
             </div>
           </div>
         </div>
@@ -525,6 +524,7 @@ function App() {
               <h1 className="text-xl sm:text-4xl font-extrabold text-slate-800 tracking-tight">
                 Novo Agendamento
               </h1>
+              <p className="text-slate-500 text-sm mt-2">Preencha os dados abaixo para reservar uma visita técnica.</p>
             </div>
             <BookingForm currentUser={currentUser} />
           </div>
