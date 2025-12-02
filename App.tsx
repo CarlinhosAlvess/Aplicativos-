@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import BookingForm from './components/BookingForm';
 import SheetEditor from './components/SheetEditor';
@@ -9,15 +8,15 @@ import { getSheetData, setFullData, removeAgendamento, confirmarPreAgendamento, 
 import { UserProfile } from './types';
 
 // --- BRANDING COMPONENT ---
-const BravoLogo = ({ className }: { className?: string }) => (
+const BayoLogo = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <linearGradient id="bravo_gradient" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+      <linearGradient id="bayo_gradient" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
         <stop stopColor="#4F46E5" /> {/* Indigo 600 */}
         <stop offset="1" stopColor="#0F172A" /> {/* Slate 900 */}
       </linearGradient>
     </defs>
-    <rect width="100" height="100" rx="28" fill="url(#bravo_gradient)" />
+    <rect width="100" height="100" rx="28" fill="url(#bayo_gradient)" />
     {/* Stylized 'B' / Lightning shape */}
     <path d="M35 28H58C68 28 72 32 72 40C72 47 67 50 60 50H45L40 75H30L35 28Z" fill="white" fillOpacity="0.9" />
     <path d="M72 40C72 44 70 50 60 50M60 50L65 50C75 50 80 55 80 65C80 75 72 80 60 80H42" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.3" />
@@ -352,10 +351,10 @@ function App() {
 
                <div className="flex flex-col items-center justify-center w-full max-w-md bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-300/60 border border-white/50 p-8 sm:p-12 z-10">
                   <div className="mb-6 transform hover:scale-105 transition-transform duration-500">
-                    <BravoLogo className="w-24 h-24 drop-shadow-xl" />
+                    <BayoLogo className="w-24 h-24 drop-shadow-xl" />
                   </div>
                   
-                  <h1 className="text-3xl font-extrabold text-slate-900 mb-1 tracking-tight">Bravo</h1>
+                  <h1 className="text-3xl font-extrabold text-slate-900 mb-1 tracking-tight">Bayo</h1>
                   <p className="text-xs text-indigo-500 font-bold uppercase tracking-widest mb-8">Gestão de Visitas</p>
                   
                   <form onSubmit={handleLogin} className="space-y-5 w-full">
@@ -394,7 +393,7 @@ function App() {
                       </button>
                   </form>
                   <p className="mt-8 text-[10px] text-slate-400 text-center">
-                      © 2025 Bravo Systems. Todos os direitos reservados.
+                      © 2025 Bayo Systems. Todos os direitos reservados.
                   </p>
                </div>
           </div>
@@ -446,10 +445,10 @@ function App() {
             
             {/* Logo Section */}
             <div className="flex items-center gap-3 shrink-0">
-              <BravoLogo className="w-8 h-8 sm:w-10 sm:h-10 shadow-sm rounded-lg" />
+              <BayoLogo className="w-8 h-8 sm:w-10 sm:h-10 shadow-sm rounded-lg" />
               <div className="flex flex-col justify-center">
                 <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 leading-none">
-                  Bravo
+                  Bayo
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500 leading-none mt-0.5">
                     Gestão

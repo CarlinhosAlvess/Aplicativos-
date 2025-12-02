@@ -87,8 +87,13 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
     if (!data) return;
     const newTechs = [...data.tecnicos];
     const numFields = ['capacidadeManha', 'capacidadeTarde', 'capacidadeNoite', 'capacidadeSabado', 'capacidadeDomingo', 'capacidadeFeriado'];
+    
     if (numFields.includes(field as string)) {
-        (newTechs[index] as any)[field] = Number(value);
+        // Validação estrita: Apenas inteiros positivos
+        let parsed = parseInt(value.toString(), 10);
+        if (isNaN(parsed)) parsed = 0;
+        if (parsed < 0) parsed = 0;
+        (newTechs[index] as any)[field] = parsed;
     } else {
         (newTechs[index] as any)[field] = value;
     }
@@ -464,12 +469,12 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                             )}
                         </div>
                     </td>
-                    <td className="p-1 bg-indigo-50/30 group-hover:bg-indigo-50/50 transition-colors"><input type="number" min="0" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeManha} onChange={(e) => handleTechChange(idx, 'capacidadeManha', e.target.value)} /></td>
-                    <td className="p-1 bg-indigo-50/30 group-hover:bg-indigo-50/50 transition-colors"><input type="number" min="0" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeTarde} onChange={(e) => handleTechChange(idx, 'capacidadeTarde', e.target.value)} /></td>
-                    <td className="p-1 bg-indigo-50/30 group-hover:bg-indigo-50/50 transition-colors"><input type="number" min="0" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeNoite || 0} onChange={(e) => handleTechChange(idx, 'capacidadeNoite', e.target.value)} /></td>
-                    <td className="p-1 bg-amber-50/30 group-hover:bg-amber-50/50 transition-colors"><input type="number" min="0" className="w-full p-2 text-center outline-none bg-transparent font-bold text-amber-700" value={tech.capacidadeSabado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeSabado', e.target.value)} /></td>
-                    <td className="p-1 bg-rose-50/30 group-hover:bg-rose-50/50 transition-colors"><input type="number" min="0" className="w-full p-2 text-center outline-none bg-transparent font-bold text-rose-700" value={tech.capacidadeDomingo || 0} onChange={(e) => handleTechChange(idx, 'capacidadeDomingo', e.target.value)} /></td>
-                    <td className="p-1 bg-purple-50/30 group-hover:bg-purple-50/50 transition-colors"><input type="number" min="0" className="w-full p-2 text-center outline-none bg-transparent font-bold text-purple-700" value={tech.capacidadeFeriado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeFeriado', e.target.value)} /></td>
+                    <td className="p-1 bg-indigo-50/30 group-hover:bg-indigo-50/50 transition-colors"><input type="number" step="1" min="0" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeManha} onChange={(e) => handleTechChange(idx, 'capacidadeManha', e.target.value)} /></td>
+                    <td className="p-1 bg-indigo-50/30 group-hover:bg-indigo-50/50 transition-colors"><input type="number" step="1" min="0" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeTarde} onChange={(e) => handleTechChange(idx, 'capacidadeTarde', e.target.value)} /></td>
+                    <td className="p-1 bg-indigo-50/30 group-hover:bg-indigo-50/50 transition-colors"><input type="number" step="1" min="0" className="w-full p-2 text-center outline-none bg-transparent font-medium text-slate-600" value={tech.capacidadeNoite || 0} onChange={(e) => handleTechChange(idx, 'capacidadeNoite', e.target.value)} /></td>
+                    <td className="p-1 bg-amber-50/30 group-hover:bg-amber-50/50 transition-colors"><input type="number" step="1" min="0" className="w-full p-2 text-center outline-none bg-transparent font-bold text-amber-700" value={tech.capacidadeSabado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeSabado', e.target.value)} /></td>
+                    <td className="p-1 bg-rose-50/30 group-hover:bg-rose-50/50 transition-colors"><input type="number" step="1" min="0" className="w-full p-2 text-center outline-none bg-transparent font-bold text-rose-700" value={tech.capacidadeDomingo || 0} onChange={(e) => handleTechChange(idx, 'capacidadeDomingo', e.target.value)} /></td>
+                    <td className="p-1 bg-purple-50/30 group-hover:bg-purple-50/50 transition-colors"><input type="number" step="1" min="0" className="w-full p-2 text-center outline-none bg-transparent font-bold text-purple-700" value={tech.capacidadeFeriado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeFeriado', e.target.value)} /></td>
                   </tr>
                 ))}
               </tbody>
