@@ -7,6 +7,8 @@ export enum Periodo {
 
 export type StatusExecucao = 'Pendente' | 'Em Andamento' | 'Concluído' | 'Não Finalizado';
 
+export type UserProfile = 'admin' | 'user';
+
 export interface Tecnico {
   id: string;
   nome: string;
@@ -38,11 +40,24 @@ export interface Agendamento {
 
   statusExecucao: StatusExecucao;
   motivoNaoConclusao?: string;
+
+  // Novos campos para Pré-Agendamento
+  tipo: 'PADRAO' | 'PRE_AGENDAMENTO';
+  criadoEm: string; // ISO Timestamp da criação
 }
 
 export interface Usuario {
   nome: string;
   senha: string;
+  perfil: UserProfile;
+}
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  usuario: string;
+  acao: string;
+  detalhes: string;
 }
 
 // Representing the "Tabs" of the spreadsheet
@@ -51,8 +66,10 @@ export interface DatabaseSchema {
   agendamentos: Agendamento[];
   atividades: string[];
   cidades: string[]; 
-  usuarios: Usuario[]; // Changed from string[] to Usuario[]
+  usuarios: Usuario[]; 
   feriados: string[]; // Lista de datas YYYY-MM-DD que são feriados
+  logs: LogEntry[]; // Histórico de auditoria
+  apiToken?: string; // Token para acesso via API externa
 }
 
 export interface TecnicoDisponivel extends Tecnico {

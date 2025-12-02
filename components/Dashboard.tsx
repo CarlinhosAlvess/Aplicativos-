@@ -1,7 +1,8 @@
+
 import React, { useEffect, useState } from 'react';
 import { getSheetData, getUniqueCities } from '../services/mockSheetService';
 import { DatabaseSchema, StatusExecucao } from '../types';
-import { ChartIcon, AlertIcon, SparklesIcon } from './Icons';
+import { ChartIcon, AlertIcon, SparklesIcon, TableIcon } from './Icons';
 
 const ProgressBar = ({ value, color = "bg-indigo-600", label, showValue = true }: { value: number, color?: string, label?: string, showValue?: boolean }) => (
   <div className="w-full">
@@ -30,8 +31,8 @@ const InsightCard = ({ type, title, message }: { type: 'danger' | 'warning' | 's
     };
 
     return (
-        <div className={`p-5 rounded-2xl border ${styles[type]} flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow`}>
-            <span className="text-xl bg-white w-10 h-10 flex items-center justify-center rounded-full shadow-sm shrink-0">{icons[type]}</span>
+        <div className={`p-4 sm:p-5 rounded-2xl border ${styles[type]} flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow`}>
+            <span className="text-lg sm:text-xl bg-white w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-full shadow-sm shrink-0">{icons[type]}</span>
             <div>
                 <h4 className="font-bold text-sm tracking-wide mb-1">{title}</h4>
                 <p className="text-xs opacity-90 leading-relaxed font-medium">{message}</p>
@@ -57,8 +58,9 @@ interface Opportunity {
 
 const Dashboard = () => {
     const [data, setData] = useState<DatabaseSchema | null>(null);
-    const [filterMode, setFilterMode] = useState<'todos' | 'data'>('todos');
+    const [filterMode, setFilterMode] = useState<'todos' | 'data' | 'mes'>('mes'); // Padrão 'mes'
     const [selectedDate, setSelectedDate] = useState<string>('');
+    const [selectedMonth, setSelectedMonth] = useState<string>('');
     const [uniqueCities, setUniqueCities] = useState<string[]>([]);
 
     useEffect(() => {
@@ -66,18 +68,31 @@ const Dashboard = () => {
         setData(getSheetData());
         setUniqueCities(getUniqueCities());
         
-        const today = new Date().toISOString().split('T')[0];
-        setSelectedDate(today);
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        
+        setSelectedDate(today.toISOString().split('T')[0]);
+        setSelectedMonth(`${yyyy}-${mm}`); // Define o mês atual como padrão
 
         return () => clearInterval(interval);
     }, []);
 
+    const handleClearFilters = () => {
+        setFilterMode('todos');
+        setSelectedDate('');
+        // setSelectedMonth(''); // Opcional: limpar mês também
+    };
+
     if (!data) return <div className="p-20 text-center text-slate-400 flex flex-col items-center gap-4"><div className="animate-spin h-8 w-8 border-4 border-indigo-500 rounded-full border-t-transparent"></div><span className="text-sm font-medium">Carregando inteligência...</span></div>;
 
-    // --- Processamento (igual ao anterior) ---
+    // --- Processamento ---
     const filteredAgendamentos = data.agendamentos.filter(ag => {
         if (filterMode === 'data' && selectedDate) {
             return ag.data === selectedDate;
+        }
+        if (filterMode === 'mes' && selectedMonth) {
+            return ag.data.startsWith(selectedMonth);
         }
         return true; 
     });
@@ -121,8 +136,8 @@ const Dashboard = () => {
         return satB - satA;
     });
 
+    // Para o gráfico de motivos (usa apenas os não finalizados do período filtrado)
     const incidentesDetalhados = filteredAgendamentos.filter(a => a.statusExecucao === 'Não Finalizado');
-
     const motivosStats = incidentesDetalhados.reduce<Record<string, number>>((acc, curr) => {
         const raw = curr.motivoNaoConclusao || 'Outros';
         const normalizedKey = raw.trim().toLowerCase();
@@ -137,6 +152,7 @@ const Dashboard = () => {
             qtd: Number(qtd)
         }));
 
+    // Insights (Geral)
     const insights = [];
     const cidadeSaturada = listaCidades.find(c => (c.agendamentos / (c.capacidadeDiaria || 1)) > 0.8);
     if (cidadeSaturada) {
@@ -163,23 +179,50 @@ const Dashboard = () => {
 
     // --- RENDER ---
     return (
-        <div className="space-y-8 pb-12 font-sans">
+        <div className="space-y-6 sm:space-y-8 pb-12 font-sans">
             {/* Header com Filtros Modernos */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-4 sm:p-6 rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                    <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-3">
                         <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><ChartIcon className="w-6 h-6" /></div>
                         Centro de Comando
                     </h2>
-                    <p className="text-slate-400 text-sm mt-1 ml-12">Análise de performance em tempo real</p>
+                    <p className="text-slate-400 text-xs sm:text-sm mt-1 ml-12">Análise de performance em tempo real</p>
                 </div>
-                <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-                    <input 
-                        type="date"
-                        value={selectedDate}
-                        onChange={(e) => { setSelectedDate(e.target.value); setFilterMode('data'); }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium border-0 focus:ring-2 focus:ring-indigo-500 outline-none transition-all ${filterMode === 'data' ? 'bg-white text-indigo-700 shadow-sm' : 'bg-transparent text-slate-500'}`}
-                    />
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                    
+                    {/* Seletor de Mês */}
+                    <div className="relative group">
+                        <span className="absolute top-1 left-2 text-[8px] uppercase font-bold text-slate-400">Mês</span>
+                        <input 
+                            type="month"
+                            value={selectedMonth}
+                            onChange={(e) => { setSelectedMonth(e.target.value); setFilterMode('mes'); setSelectedDate(''); }}
+                            className={`px-4 pt-3 pb-1 rounded-lg text-sm font-bold border-0 focus:ring-2 focus:ring-indigo-500 outline-none transition-all h-full ${filterMode === 'mes' ? 'bg-white text-indigo-700 shadow-sm' : 'bg-transparent text-slate-500'}`}
+                        />
+                    </div>
+
+                    {/* Seletor de Dia */}
+                    <div className="relative group">
+                        <span className="absolute top-1 left-2 text-[8px] uppercase font-bold text-slate-400">Dia Específico</span>
+                        <input 
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => { setSelectedDate(e.target.value); setFilterMode('data'); setSelectedMonth(''); }}
+                            className={`px-4 pt-3 pb-1 rounded-lg text-sm font-bold border-0 focus:ring-2 focus:ring-indigo-500 outline-none transition-all h-full ${filterMode === 'data' ? 'bg-white text-indigo-700 shadow-sm' : 'bg-transparent text-slate-500'}`}
+                        />
+                    </div>
+                    
+                    {(filterMode === 'data' || filterMode === 'mes') && (
+                        <button
+                            onClick={handleClearFilters}
+                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-3 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1"
+                            title="Limpar Filtros"
+                        >
+                            <span className="text-lg leading-none">&times;</span>
+                        </button>
+                    )}
+
                     <button 
                          onClick={() => setFilterMode('todos')}
                          className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${filterMode === 'todos' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
@@ -189,24 +232,24 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 {insights.map((insight, idx) => (
                     <InsightCard key={idx} {...insight} />
                 ))}
             </div>
 
             {/* KPI Cards Minimalistas */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                 {[
                     { label: 'Volume Total', value: totalAgendamentos, sub: 'Visitas', color: 'text-slate-800', border: 'border-indigo-500' },
                     { label: 'Taxa Sucesso', value: `${taxaSucesso}%`, sub: 'Conclusão', color: 'text-emerald-600', border: 'border-emerald-500' },
                     { label: 'Em Andamento', value: pendentes + emAndamento, sub: 'Ativas', color: 'text-amber-600', border: 'border-amber-500' },
                     { label: 'Incidências', value: naoFinalizados, sub: 'Falhas', color: 'text-rose-600', border: 'border-rose-500' }
                 ].map((kpi, idx) => (
-                    <div key={idx} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div key={idx} className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group">
                         <div className={`absolute top-0 left-0 w-1 h-full ${kpi.border.replace('border-', 'bg-')}`}></div>
-                        <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">{kpi.label}</span>
-                        <div className={`mt-2 text-4xl font-extrabold ${kpi.color}`}>{kpi.value}</div>
+                        <span className="text-slate-400 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">{kpi.label}</span>
+                        <div className={`mt-2 text-2xl sm:text-4xl font-extrabold ${kpi.color}`}>{kpi.value}</div>
                         <div className="text-xs text-slate-400 mt-1 font-medium">{kpi.sub}</div>
                     </div>
                 ))}
@@ -214,7 +257,7 @@ const Dashboard = () => {
 
             {/* Plano de Melhorias */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-50 to-violet-50 px-8 py-6 border-b border-indigo-100/50">
+                <div className="bg-gradient-to-r from-indigo-50 to-violet-50 px-6 sm:px-8 py-4 sm:py-6 border-b border-indigo-100/50">
                     <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
                         <SparklesIcon className="w-5 h-5 text-indigo-600" />
                         Diagnóstico Inteligente
@@ -230,7 +273,7 @@ const Dashboard = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100">
                         {oportunidadesMelhoria.map((item, idx) => (
-                            <div key={idx} className="p-8 hover:bg-slate-50/50 transition-colors">
+                            <div key={idx} className="p-4 sm:p-8 hover:bg-slate-50/50 transition-colors">
                                 <div className="flex justify-between items-start mb-4">
                                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 border border-slate-200 px-2 py-1 rounded-md">{item.area}</span>
                                     <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
@@ -256,10 +299,10 @@ const Dashboard = () => {
             </div>
 
             {/* Gráficos */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
                 
                 {/* Saturação */}
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+                <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100">
                     <h3 className="text-lg font-bold text-slate-800 mb-8">Capacidade vs Demanda</h3>
                     <div className="space-y-6">
                         {listaCidades.map((cid, idx) => {
@@ -287,7 +330,7 @@ const Dashboard = () => {
                 </div>
 
                 {/* Pareto */}
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+                <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100">
                     <h3 className="text-lg font-bold text-slate-800 mb-8">Motivos de Falha</h3>
                     {chartMotivos.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-48 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
@@ -310,47 +353,95 @@ const Dashboard = () => {
 
             </div>
 
-             {/* Tabela Incidências */}
+             {/* Relatório Mensal Detalhado (Substituindo apenas Incidências) */}
              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-                    <h3 className="text-lg font-bold text-slate-800">
-                        Relatório de Incidências
-                    </h3>
-                    <span className="bg-white px-3 py-1 rounded-full text-xs font-bold border border-slate-200 text-slate-500 shadow-sm">
-                        {incidentesDetalhados.length} Registros
+                <div className="px-6 sm:px-8 py-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50/30 gap-4">
+                    <div className="flex items-center gap-3">
+                         <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-indigo-600">
+                             <TableIcon className="w-5 h-5" />
+                         </div>
+                         <div>
+                             <h3 className="text-lg font-bold text-slate-800">
+                                {filterMode === 'mes' ? 'Relatório Mensal' : filterMode === 'data' ? 'Relatório Diário' : 'Histórico Completo'}
+                             </h3>
+                             <p className="text-xs text-slate-500">Listagem completa dos agendamentos filtrados</p>
+                         </div>
+                    </div>
+                    <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm shadow-indigo-200">
+                        {filteredAgendamentos.length} Registros
                     </span>
                 </div>
                 
-                {incidentesDetalhados.length === 0 ? (
-                     <div className="p-8 text-center text-slate-400 italic">Nenhuma pendência.</div>
+                {filteredAgendamentos.length === 0 ? (
+                     <div className="p-12 text-center text-slate-400 flex flex-col items-center">
+                         <span className="text-4xl mb-2 opacity-50">📅</span>
+                         <p className="italic">Nenhum agendamento encontrado para este período.</p>
+                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-slate-500 font-semibold uppercase bg-slate-50 border-b border-slate-100">
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                        <table className="w-full text-sm text-left border-collapse">
+                            <thead className="text-xs text-slate-500 font-semibold uppercase bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
                                 <tr>
-                                    <th className="px-8 py-4">Data</th>
-                                    <th className="px-8 py-4">Cliente</th>
-                                    <th className="px-8 py-4">Técnico</th>
-                                    <th className="px-8 py-4">Motivo</th>
+                                    <th className="px-6 py-4 bg-slate-50">Data / Período</th>
+                                    <th className="px-6 py-4 bg-slate-50">Cidade</th>
+                                    <th className="px-6 py-4 bg-slate-50">Cliente / Contato</th>
+                                    <th className="px-6 py-4 bg-slate-50">Técnico / Atividade</th>
+                                    <th className="px-6 py-4 bg-slate-50 text-center">Status</th>
+                                    <th className="px-6 py-4 bg-slate-50">Obs / Motivo</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
-                                {incidentesDetalhados.map((item) => (
-                                    <tr key={item.id} className="bg-white hover:bg-slate-50 transition-colors">
-                                        <td className="px-8 py-4 whitespace-nowrap text-slate-600 font-mono text-xs">
-                                            {item.data}
+                                {filteredAgendamentos.sort((a,b) => b.data.localeCompare(a.data)).map((item) => (
+                                    <tr key={item.id} className="bg-white hover:bg-slate-50 transition-colors group">
+                                        
+                                        {/* Data e Período */}
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="font-bold text-slate-700 text-xs sm:text-sm">{item.data.split('-').reverse().join('/')}</div>
+                                            <div className="text-[10px] text-slate-500 uppercase font-medium bg-slate-100 px-2 py-0.5 rounded w-fit mt-1">
+                                                {item.periodo.split('(')[0]}
+                                            </div>
                                         </td>
-                                        <td className="px-8 py-4 font-semibold text-slate-800">
-                                            {item.cliente}
-                                            <div className="text-[10px] uppercase tracking-wider text-slate-400 mt-0.5">{item.cidade}</div>
+
+                                        {/* Cidade */}
+                                        <td className="px-6 py-4 font-medium text-slate-600">
+                                            {item.cidade}
                                         </td>
-                                        <td className="px-8 py-4 text-indigo-600 font-medium">
-                                            {item.tecnicoNome}
+
+                                        {/* Cliente */}
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-slate-800">{item.cliente}</div>
+                                            <div className="text-xs text-slate-400 mt-0.5 font-mono">{item.telefone}</div>
                                         </td>
-                                        <td className="px-8 py-4">
-                                            <span className="inline-block bg-rose-50 text-rose-700 text-xs font-bold px-2 py-1 rounded border border-rose-100">
-                                                {item.motivoNaoConclusao}
+
+                                        {/* Técnico e Atividade */}
+                                        <td className="px-6 py-4">
+                                            <div className="text-indigo-600 font-bold">{item.tecnicoNome}</div>
+                                            <div className="text-xs text-slate-500 mt-0.5">{item.atividade}</div>
+                                        </td>
+
+                                        {/* Status Badge */}
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
+                                                item.statusExecucao === 'Concluído' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                                item.statusExecucao === 'Não Finalizado' ? 'bg-rose-50 text-rose-700 border-rose-100' :
+                                                item.statusExecucao === 'Em Andamento' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                                'bg-slate-100 text-slate-500 border-slate-200'
+                                            }`}>
+                                                {item.statusExecucao}
                                             </span>
+                                        </td>
+
+                                        {/* Motivo / Obs */}
+                                        <td className="px-6 py-4">
+                                            {item.statusExecucao === 'Não Finalizado' ? (
+                                                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded border border-rose-100 inline-block">
+                                                    {item.motivoNaoConclusao || 'Motivo não informado'}
+                                                </span>
+                                            ) : item.tipo === 'PRE_AGENDAMENTO' ? (
+                                                <span className="text-[10px] text-amber-600 font-medium">Reserva Temporária</span>
+                                            ) : (
+                                                <span className="text-slate-300 text-xs">-</span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

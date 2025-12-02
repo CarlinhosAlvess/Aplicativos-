@@ -1,7 +1,7 @@
 
-import { Agendamento, DatabaseSchema, Periodo, Tecnico, TecnicoDisponivel, Usuario } from '../types';
+import { Agendamento, DatabaseSchema, Periodo, Tecnico, TecnicoDisponivel, Usuario, LogEntry } from '../types';
 
-const STORAGE_KEY = 'app_agendamento_sheet_data_v8'; // Version bumped to apply new password
+const STORAGE_KEY = 'app_agendamento_sheet_data_v9'; 
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
 
@@ -78,10 +78,10 @@ const INITIAL_DATA: DatabaseSchema = {
     "Campinas", "Jundiaí", "Sorocaba", "Santos"
   ],
   usuarios: [
-    { nome: "Administrador", senha: "1234" },
-    { nome: "Atendente 1", senha: "123" },
-    { nome: "Atendente 2", senha: "123" },
-    { nome: "Gerente", senha: "123" }
+    { nome: "Administrador", senha: "1234", perfil: "admin" },
+    { nome: "Atendente 1", senha: "123", perfil: "user" },
+    { nome: "Atendente 2", senha: "123", perfil: "user" },
+    { nome: "Gerente", senha: "123", perfil: "admin" }
   ],
   feriados: [
       "2025-12-25", // Natal
@@ -101,7 +101,9 @@ const INITIAL_DATA: DatabaseSchema = {
         atividade: 'Suporte',
         status: 'Confirmado',
         statusExecucao: 'Concluído',
-        nomeUsuario: 'Administrador'
+        nomeUsuario: 'Administrador',
+        tipo: 'PADRAO',
+        criadoEm: new Date().toISOString()
     },
     {
         id: 'mock-2',
@@ -116,9 +118,13 @@ const INITIAL_DATA: DatabaseSchema = {
         status: 'Confirmado',
         statusExecucao: 'Não Finalizado',
         motivoNaoConclusao: 'Equipamento em falta',
-        nomeUsuario: 'Atendente 1'
+        nomeUsuario: 'Atendente 1',
+        tipo: 'PADRAO',
+        criadoEm: new Date().toISOString()
     }
-  ]
+  ],
+  logs: [],
+  apiToken: ""
 };
 
 export const getSheetData = (): DatabaseSchema => {
@@ -128,13 +134,14 @@ export const getSheetData = (): DatabaseSchema => {
         const parsed = JSON.parse(data);
         
         // --- Migrações de Schema ---
-
-        // Migração de Usuários (String -> Object)
         if (parsed.usuarios && parsed.usuarios.length > 0 && typeof parsed.usuarios[0] === 'string') {
-            parsed.usuarios = parsed.usuarios.map((u: string) => ({ nome: u, senha: '123' }));
+            parsed.usuarios = parsed.usuarios.map((u: string) => ({ nome: u, senha: '123', perfil: 'user' }));
+        }
+        // Migração de perfil
+        if (parsed.usuarios && parsed.usuarios.length > 0 && typeof parsed.usuarios[0] === 'object' && !parsed.usuarios[0].perfil) {
+             parsed.usuarios = parsed.usuarios.map((u: any) => ({ ...u, perfil: u.nome === 'Administrador' ? 'admin' : 'user' }));
         }
 
-        // Garante campos de sábado/domingo/feriado
         if (parsed.tecnicos.length > 0) {
             if (typeof parsed.tecnicos[0].capacidadeSabado === 'undefined') {
                  parsed.tecnicos = parsed.tecnicos.map((t: any) => ({
@@ -145,19 +152,20 @@ export const getSheetData = (): DatabaseSchema => {
                  }));
             }
         }
-
-        // Garante lista de feriados
-        if (!parsed.feriados) {
-            parsed.feriados = INITIAL_DATA.feriados;
-        }
-
-        if (!parsed.cidades) {
-            parsed.cidades = INITIAL_DATA.cidades;
-        }
+        if (!parsed.feriados) parsed.feriados = INITIAL_DATA.feriados;
+        if (!parsed.cidades) parsed.cidades = INITIAL_DATA.cidades;
+        if (!parsed.usuarios) parsed.usuarios = INITIAL_DATA.usuarios;
+        if (!parsed.logs) parsed.logs = [];
         
-        if (!parsed.usuarios) {
-            parsed.usuarios = INITIAL_DATA.usuarios;
-        }
+        // Garantir campo apiToken
+        if (typeof parsed.apiToken === 'undefined') parsed.apiToken = "";
+
+        // Migração para incluir 'tipo' e 'criadoEm'
+        parsed.agendamentos = parsed.agendamentos.map((ag: any) => ({
+            ...ag,
+            tipo: ag.tipo || 'PADRAO',
+            criadoEm: ag.criadoEm || new Date().toISOString()
+        }));
 
         return parsed;
     } catch (e) {
@@ -169,6 +177,28 @@ export const getSheetData = (): DatabaseSchema => {
 
 export const saveSheetData = (data: DatabaseSchema) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  // Dispara evento para avisar outros componentes que os dados mudaram
+  window.dispatchEvent(new Event('localDataChanged'));
+};
+
+export const addLog = (usuario: string, acao: string, detalhes: string) => {
+    const data = getSheetData();
+    const newLog: LogEntry = {
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        usuario,
+        acao,
+        detalhes
+    };
+    // Mantém apenas os últimos 500 logs para não pesar
+    const updatedLogs = [newLog, ...(data.logs || [])].slice(0, 500);
+    data.logs = updatedLogs;
+    saveSheetData(data);
+};
+
+// Nova função para atualizar tudo (usado pelo sync da nuvem)
+export const setFullData = (data: DatabaseSchema) => {
+    saveSheetData(data);
 };
 
 export const addAgendamento = (agendamento: Agendamento) => {
@@ -177,11 +207,65 @@ export const addAgendamento = (agendamento: Agendamento) => {
   saveSheetData(data);
 };
 
+// Remove agendamentos especificos (usado na expiracao manual ou edicao)
+export const removeAgendamento = (id: string) => {
+    const data = getSheetData();
+    data.agendamentos = data.agendamentos.filter(a => a.id !== id);
+    saveSheetData(data);
+};
+
+// Função em lote para verificar e remover expirados
+export const expirePreBookings = (): Agendamento[] => {
+    const data = getSheetData();
+    const now = Date.now();
+    const active: Agendamento[] = [];
+    const expired: Agendamento[] = [];
+    
+    // Limite de 30 minutos em milissegundos
+    const EXPIRATION_LIMIT = 30 * 60 * 1000; 
+
+    data.agendamentos.forEach(ag => {
+        if (ag.tipo === 'PRE_AGENDAMENTO' && ag.criadoEm) {
+            const created = new Date(ag.criadoEm).getTime();
+            if ((now - created) >= EXPIRATION_LIMIT) {
+                expired.push(ag);
+                return; // Não adiciona na lista active
+            }
+        }
+        active.push(ag);
+    });
+
+    // Se houve remoções, salva o novo estado
+    if (expired.length > 0) {
+        data.agendamentos = active;
+        // Log sistema
+        addLog('Sistema', 'Expiração Automática', `Removeu ${expired.length} pré-agendamentos expirados.`);
+        saveSheetData(data);
+    }
+
+    return expired;
+};
+
+// Confirma um pré-agendamento transformando em padrão
+export const confirmarPreAgendamento = (id: string) => {
+    const data = getSheetData();
+    const index = data.agendamentos.findIndex(a => a.id === id);
+    if (index !== -1) {
+        data.agendamentos[index].tipo = 'PADRAO';
+        saveSheetData(data);
+        return true;
+    }
+    return false;
+};
+
 export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo: Periodo): TecnicoDisponivel[] => {
   const db = getSheetData();
   
-  const dateObj = new Date(dataStr + 'T12:00:00');
-  const dayOfWeek = dateObj.getDay();
+  // Parse seguro da data para garantir o dia da semana correto (Local Time)
+  const [year, month, day] = dataStr.split('-').map(Number);
+  const dateObj = new Date(year, month - 1, day);
+  const dayOfWeek = dateObj.getDay(); // 0 = Domingo, 6 = Sábado
+  
   const isSaturday = dayOfWeek === 6;
   const isSunday = dayOfWeek === 0;
   const isHoliday = (db.feriados || []).includes(dataStr);
@@ -194,26 +278,34 @@ export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo
     let capacity = 0;
     let appointmentsCount = 0;
 
+    // Lógica de Prioridade: Feriado > Sábado > Domingo > Dia Útil
     if (isHoliday) {
-        capacity = tech.capacidadeFeriado || 0;
+        // Capacidade TOTAL do dia
+        capacity = Number(tech.capacidadeFeriado ?? 0);
+        // Conta agendamentos de TODO o dia, independente do período
         appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else if (isSaturday) {
-        capacity = tech.capacidadeSabado || 0;
+        // Capacidade TOTAL do dia
+        capacity = Number(tech.capacidadeSabado ?? 0);
+        // Conta agendamentos de TODO o dia, independente do período
         appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else if (isSunday) {
-        capacity = tech.capacidadeDomingo || 0;
+        // Capacidade TOTAL do dia
+        capacity = Number(tech.capacidadeDomingo ?? 0);
+        // Conta agendamentos de TODO o dia, independente do período
         appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else {
-        if (periodo === Periodo.MANHA) capacity = tech.capacidadeManha;
-        else if (periodo === Periodo.TARDE) capacity = tech.capacidadeTarde;
-        else if (periodo === Periodo.NOITE) capacity = tech.capacidadeNoite || 0;
+        // Dia Útil: Capacidade por Período
+        if (periodo === Periodo.MANHA) capacity = Number(tech.capacidadeManha);
+        else if (periodo === Periodo.TARDE) capacity = Number(tech.capacidadeTarde);
+        else if (periodo === Periodo.NOITE) capacity = Number(tech.capacidadeNoite ?? 0);
 
         appointmentsCount = db.agendamentos.filter(a => 
             a.tecnicoId === tech.id && a.data === dataStr && a.periodo === periodo
         ).length;
     }
     
-    const vagasRestantes = capacity - appointmentsCount;
+    const vagasRestantes = Math.max(0, capacity - appointmentsCount);
 
     return {
       ...tech,
@@ -222,14 +314,9 @@ export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo
   }).filter(tech => tech.vagasRestantes > 0);
 };
 
-// Verifica quais períodos têm pelo menos um técnico disponível
 export const getAvailablePeriods = (cidade: string, dataStr: string): Periodo[] => {
     if (!cidade || !dataStr) return [];
-    
-    // Lista fixa de todos os períodos possíveis
     const allPeriods = [Periodo.MANHA, Periodo.TARDE, Periodo.NOITE];
-    
-    // Filtra apenas os períodos onde getAvailableTechnicians retorna > 0
     return allPeriods.filter(p => {
         const techs = getAvailableTechnicians(cidade, dataStr, p);
         return techs.length > 0;
@@ -246,7 +333,6 @@ export const getAtividades = (): string[] => {
   return db.atividades || [];
 };
 
-// Retorna apenas nomes para o Dropdown/Validação, abstraindo a senha
 export const getUsuarios = (): string[] => {
     const db = getSheetData();
     return db.usuarios ? db.usuarios.map(u => u.nome) : [];
