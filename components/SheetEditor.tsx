@@ -159,23 +159,31 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
 
   const handleUsuarioNameChange = (index: number, value: string) => {
       if (!data) return;
-      const newUsers = [...(data.usuarios || [])];
-      newUsers[index].nome = value;
+      // Imutabilidade correta: cria novo array e novo objeto para o item alterado
+      const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, nome: value } : u);
       setData({ ...data, usuarios: newUsers });
   };
 
   const handleUsuarioPassChange = (index: number, value: string) => {
       if (!data) return;
-      const newUsers = [...(data.usuarios || [])];
-      newUsers[index].senha = value;
+      // Imutabilidade correta
+      const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, senha: value } : u);
       setData({ ...data, usuarios: newUsers });
   };
 
   const handleUsuarioProfileChange = (index: number, value: UserProfile) => {
       if (!data) return;
-      const newUsers = [...(data.usuarios || [])];
-      newUsers[index].perfil = value;
-      setData({ ...data, usuarios: newUsers });
+      
+      // 1. Atualizar Estado Local
+      const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, perfil: value } : u);
+      const newData = { ...data, usuarios: newUsers };
+      setData(newData);
+
+      // 2. Salvar Imediatamente no LocalStorage (CRÍTICO)
+      // Isso evita que o addLog (que lê do storage) pegue a versão antiga e sobrescreva a alteração.
+      saveSheetData(newData);
+
+      // 3. Registrar Log (que agora vai ler os dados atualizados)
       addLog(currentUser.nome, 'Alterar Perfil', `Usuário: ${newUsers[index].nome} para ${value}`);
   }
 
@@ -184,7 +192,13 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       const newUsers = [...(data.usuarios || [])];
       const deletedUser = newUsers[index].nome;
       newUsers.splice(index, 1);
-      setData({...data, usuarios: newUsers});
+      
+      const newData = {...data, usuarios: newUsers};
+      
+      // Atualiza estado e salva imediatamente antes do log
+      setData(newData);
+      saveSheetData(newData);
+      
       addLog(currentUser.nome, 'Excluir Usuário', `Usuário: ${deletedUser}`);
   }
 
