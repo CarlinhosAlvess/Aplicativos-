@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { getAvailableTechnicians, getUniqueCities, addAgendamento, getAtividades, getAvailablePeriods, addLog, getSheetData } from '../services/mockSheetService';
 import { Agendamento, Periodo, TecnicoDisponivel } from '../types';
@@ -91,7 +92,8 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
       );
 
       if (exists) {
-          setDuplicityError(`Atenção: Já existe um agendamento para "${cName}" em ${cCity} nesta data.`);
+          // Mensagem simplificada aqui pois o título do alerta já diz "Duplicidade"
+          setDuplicityError(`Já existe um agendamento para "${cName}" em ${cCity} nesta data.`);
       } else {
           setDuplicityError(null);
       }
@@ -157,7 +159,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
       if (tipoAgendamento === 'PRE_AGENDAMENTO') {
           msg = `⏱️ Pré-Agendamento Iniciado!\n\nA vaga está reservada por 30 minutos.\nVocê deve confirmar no app antes que expire.`;
       } else {
-          msg = `Agendamento confirmado!\n\nTécnico: ${newBooking.tecnicoNome}\nData: ${newBooking.data.split('-').reverse().join('/')} - ${newBooking.periodo}\nLocal: ${newBooking.cidade}`;
+          msg = `Agendamento confirmado!\nCliente: ${newBooking.cliente}\nTécnico: ${newBooking.tecnicoNome}\nData: ${newBooking.data.split('-').reverse().join('/')} - ${newBooking.periodo}\nLocal: ${newBooking.cidade}`;
       }
       setSuccessMessage(msg);
       setIsSubmitting(false);
@@ -335,10 +337,16 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
               </div>
             </div>
 
+            {/* ERROR DISPLAY UPDATED - MORE PROMINENT */}
             {duplicityError && (
-                <div className="bg-amber-50 text-amber-800 text-xs p-3 rounded-lg border border-amber-100 flex gap-2 items-center animate-fade-in">
-                    <AlertIcon className="w-4 h-4 shrink-0" />
-                    <p>{duplicityError}</p>
+                <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl shadow-md flex items-start gap-3 animate-fade-in my-4 ring-1 ring-rose-200">
+                    <div className="bg-rose-100 p-2 rounded-full text-rose-600 shrink-0">
+                        <AlertIcon className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-rose-800 text-sm mb-1 uppercase tracking-wide">Duplicidade Detectada</h4>
+                        <p className="text-rose-700 text-xs leading-relaxed font-medium">{duplicityError}</p>
+                    </div>
                 </div>
             )}
 

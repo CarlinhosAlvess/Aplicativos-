@@ -1,10 +1,17 @@
 
 import React, { useEffect, useState } from 'react';
 import { getSheetData, getUniqueCities } from '../services/mockSheetService';
-import { DatabaseSchema, StatusExecucao } from '../types';
+import { DatabaseSchema, StatusExecucao, Agendamento } from '../types';
 import { ChartIcon, AlertIcon, SparklesIcon, TableIcon } from './Icons';
 
-const ProgressBar = ({ value, color = "bg-indigo-600", label, showValue = true }: { value: number, color?: string, label?: string, showValue?: boolean }) => (
+interface ProgressBarProps {
+    value: number;
+    color?: string;
+    label?: string;
+    showValue?: boolean;
+}
+
+const ProgressBar: React.FC<ProgressBarProps> = ({ value, color = "bg-indigo-600", label, showValue = true }) => (
   <div className="w-full">
     <div className="flex justify-between mb-1.5">
       {label && <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</span>}
@@ -18,7 +25,7 @@ const ProgressBar = ({ value, color = "bg-indigo-600", label, showValue = true }
 
 const InsightCard = ({ type, title, message }: { type: 'danger' | 'warning' | 'success' | 'info', title: string, message: string }) => {
     const styles = {
-        danger: 'bg-red-50 border-red-100 text-red-900',
+        danger: 'bg-rose-50 border-rose-100 text-rose-900',
         warning: 'bg-amber-50 border-amber-100 text-amber-900',
         success: 'bg-emerald-50 border-emerald-100 text-emerald-900',
         info: 'bg-indigo-50 border-indigo-100 text-indigo-900'
@@ -41,32 +48,15 @@ const InsightCard = ({ type, title, message }: { type: 'danger' | 'warning' | 's
     );
 }
 
-interface CityStats {
-    nome: string;
-    tecnicos: number;
-    agendamentos: number;
-    capacidadeDiaria: number;
-}
-
-interface Opportunity {
-    area: string;
-    problema: string;
-    acao: string;
-    prioridade: 'Alta' | 'Média' | 'Baixa';
-    impacto: string;
-}
-
 const Dashboard = () => {
     const [data, setData] = useState<DatabaseSchema | null>(null);
-    const [filterMode, setFilterMode] = useState<'todos' | 'data' | 'mes'>('mes'); // Padrão 'mes'
+    const [filterMode, setFilterMode] = useState<'todos' | 'data' | 'mes'>('mes');
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [selectedMonth, setSelectedMonth] = useState<string>('');
-    const [uniqueCities, setUniqueCities] = useState<string[]>([]);
 
     useEffect(() => {
         const interval = setInterval(() => setData(getSheetData()), 2000);
         setData(getSheetData());
-        setUniqueCities(getUniqueCities());
         
         const today = new Date();
         const yyyy = today.getFullYear();
@@ -81,373 +71,244 @@ const Dashboard = () => {
     const handleClearFilters = () => {
         setFilterMode('todos');
         setSelectedDate('');
-        // setSelectedMonth(''); // Opcional: limpar mês também
+        // Mantém o mês selecionado no atual para não quebrar a view mensal, mas limpa filtro de dia
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        setSelectedMonth(`${yyyy}-${mm}`);
     };
 
-    if (!data) return <div className="p-20 text-center text-slate-400 flex flex-col items-center gap-4"><div className="animate-spin h-8 w-8 border-4 border-indigo-500 rounded-full border-t-transparent"></div><span className="text-sm font-medium">Carregando inteligência...</span></div>;
+    if (!data) return <div className="text-center p-10 text-slate-400">Carregando dados...</div>;
 
-    // --- Processamento ---
-    const filteredAgendamentos = data.agendamentos.filter(ag => {
-        if (filterMode === 'data' && selectedDate) {
-            return ag.data === selectedDate;
-        }
-        if (filterMode === 'mes' && selectedMonth) {
-            return ag.data.startsWith(selectedMonth);
-        }
-        return true; 
-    });
-
-    const totalAgendamentos = filteredAgendamentos.length;
-    const countStatus = (status: StatusExecucao) => filteredAgendamentos.filter(a => a.statusExecucao === status).length;
-    const concluidos = countStatus('Concluído');
-    const naoFinalizados = countStatus('Não Finalizado');
-    const emAndamento = countStatus('Em Andamento');
-    const pendentes = countStatus('Pendente');
-    const totalFechados = concluidos + naoFinalizados;
-    const taxaSucesso = totalFechados > 0 ? Math.round((concluidos / totalFechados) * 100) : 0;
-
-    const cidadesStats: Record<string, CityStats> = {};
-    uniqueCities.forEach(cidade => {
-        cidadesStats[cidade] = { nome: cidade, tecnicos: 0, agendamentos: 0, capacidadeDiaria: 0 }
-    });
-
-    data.tecnicos.forEach(tech => {
-        if (tech.cidades && Array.isArray(tech.cidades)) {
-            tech.cidades.forEach(c => {
-                if (cidadesStats[c]) {
-                    cidadesStats[c].tecnicos += 1;
-                    cidadesStats[c].capacidadeDiaria += (Number(tech.capacidadeManha) + Number(tech.capacidadeTarde) + (Number(tech.capacidadeNoite) || 0));
-                }
-            });
-        }
-    });
-
-    filteredAgendamentos.forEach(ag => {
-        if (cidadesStats[ag.cidade]) {
-            cidadesStats[ag.cidade].agendamentos += 1;
-        } else if (!cidadesStats[ag.cidade]) {
-            cidadesStats[ag.cidade] = { nome: ag.cidade, tecnicos: 0, agendamentos: 1, capacidadeDiaria: 0 };
-        }
-    });
+    // --- FILTRAGEM DE DADOS ---
+    let filteredAgendamentos = data.agendamentos;
     
-    const listaCidades = (Object.values(cidadesStats) as CityStats[]).sort((a: CityStats, b: CityStats) => {
-        const satA = Number(a.agendamentos) / (Number(a.capacidadeDiaria) || 1);
-        const satB = Number(b.agendamentos) / (Number(b.capacidadeDiaria) || 1);
-        return satB - satA;
-    });
-
-    // Para o gráfico de motivos (usa apenas os não finalizados do período filtrado)
-    const incidentesDetalhados = filteredAgendamentos.filter(a => a.statusExecucao === 'Não Finalizado');
-    const motivosStats = incidentesDetalhados.reduce<Record<string, number>>((acc, curr) => {
-        const raw = curr.motivoNaoConclusao || 'Outros';
-        const normalizedKey = raw.trim().toLowerCase();
-        acc[normalizedKey] = (acc[normalizedKey] || 0) + 1;
-        return acc;
-    }, {});
-    
-    const chartMotivos = Object.entries(motivosStats)
-        .sort((a, b) => (b[1] as number) - (a[1] as number))
-        .map(([key, qtd]) => ({ 
-            motivo: key.charAt(0).toUpperCase() + key.slice(1), 
-            qtd: Number(qtd)
-        }));
-
-    // Insights (Geral)
-    const insights = [];
-    const cidadeSaturada = listaCidades.find(c => (c.agendamentos / (c.capacidadeDiaria || 1)) > 0.8);
-    if (cidadeSaturada) {
-        insights.push({ type: 'danger' as const, title: `Atenção: ${cidadeSaturada.nome}`, message: `Operando próximo da saturação máxima (${cidadeSaturada.agendamentos}/${cidadeSaturada.capacidadeDiaria}).` });
-    } else {
-        insights.push({ type: 'success' as const, title: 'Operação Saudável', message: 'Regiões dentro da capacidade ideal.' });
+    // Filtragem para KPIs e Gráficos Gerais (Pode ser por dia ou mês)
+    if (filterMode === 'data' && selectedDate) {
+        filteredAgendamentos = data.agendamentos.filter(a => a.data === selectedDate);
+    } else if (filterMode === 'mes' && selectedMonth) {
+        filteredAgendamentos = data.agendamentos.filter(a => a.data.startsWith(selectedMonth));
     }
 
-    const oportunidadesMelhoria: Opportunity[] = [];
-    const countFailuresByKeyword = (keywords: string[]) => {
-        return chartMotivos.filter(m => keywords.some(k => m.motivo.toLowerCase().includes(k))).reduce((sum: number, m) => sum + m.qtd, 0);
-    };
+    const totalAgendamentos = filteredAgendamentos.length;
+    const concluidos = filteredAgendamentos.filter(a => a.statusExecucao === 'Concluído').length;
+    const problemas = filteredAgendamentos.filter(a => a.statusExecucao === 'Não Finalizado').length;
+    const taxaConclusao = totalAgendamentos > 0 ? (concluidos / totalAgendamentos) * 100 : 0;
 
-    const qtdLogistica = countFailuresByKeyword(['equipamento', 'material', 'peça', 'estoque', 'ferramenta']);
-    if (qtdLogistica > 0) oportunidadesMelhoria.push({ area: 'Logística', problema: `${qtdLogistica} visitas sem material.`, acao: 'Revisar kit veicular e estoque.', prioridade: 'Alta', impacto: 'Redução de retorno.' });
+    // Dados para Gráficos
+    const statusCounts: Record<string, number> = {};
+    filteredAgendamentos.forEach(a => {
+        statusCounts[a.statusExecucao] = (statusCounts[a.statusExecucao] || 0) + 1;
+    });
 
-    const qtdAcesso = countFailuresByKeyword(['ausente', 'fechado', 'não atende', 'endereço', 'local']);
-    if (qtdAcesso > 0) oportunidadesMelhoria.push({ area: 'Comunicação', problema: `${qtdAcesso} clientes ausentes.`, acao: 'WhatsApp pré-visita.', prioridade: 'Média', impacto: 'Otimização de rotas.' });
+    const cityCounts: Record<string, number> = {};
+    filteredAgendamentos.forEach(a => {
+        cityCounts[a.cidade] = (cityCounts[a.cidade] || 0) + 1;
+    });
+    
+    // Ordenar cidades por volume
+    const sortedCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-    const cidadesCriticas = listaCidades.filter(c => (c.agendamentos / (c.capacidadeDiaria || 1)) > 0.9);
-    if (cidadesCriticas.length > 0) oportunidadesMelhoria.push({ area: 'Capacidade', problema: `Alta saturação em ${cidadesCriticas.length} regiões.`, acao: 'Remanejar ou contratar técnicos.', prioridade: 'Alta', impacto: 'SLA garantido.' });
+    // GAPS e Melhorias
+    const idleTechs = data.tecnicos.filter(t => {
+        // Verifica técnicos sem agendamento no período filtrado
+        const hasWork = filteredAgendamentos.some(a => a.tecnicoId === t.id);
+        return !hasWork;
+    });
 
-    if (taxaSucesso < 85 && totalAgendamentos > 5) oportunidadesMelhoria.push({ area: 'Qualidade', problema: `Taxa de sucesso ${taxaSucesso}% (Meta 85%).`, acao: 'Reciclagem técnica.', prioridade: 'Média', impacto: 'Qualidade percebida.' });
-
-    // --- RENDER ---
     return (
-        <div className="space-y-6 sm:space-y-8 pb-12 font-sans">
-            {/* Header com Filtros Modernos */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-4 sm:p-6 rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100">
+        <div className="space-y-6 sm:space-y-8 pb-10">
+            {/* Header e Filtros */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                 <div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-3">
-                        <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><ChartIcon className="w-6 h-6" /></div>
-                        Centro de Comando
-                    </h2>
-                    <p className="text-slate-400 text-xs sm:text-sm mt-1 ml-12">Análise de performance em tempo real</p>
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Dashboard Gerencial</h2>
+                    <p className="text-slate-500 text-sm mt-1">Visão geral de desempenho e operações.</p>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-                    
-                    {/* Seletor de Mês */}
-                    <div className="relative group">
-                        <span className="absolute top-1 left-2 text-[8px] uppercase font-bold text-slate-400">Mês</span>
-                        <input 
-                            type="month"
+                
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    {/* Filtro de Mês (Principal) */}
+                    <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
+                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide px-1 mb-1">Mês de Referência</label>
+                         <input 
+                            type="month" 
+                            className="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg block w-full p-2 outline-none focus:ring-2 focus:ring-indigo-500"
                             value={selectedMonth}
-                            onChange={(e) => { setSelectedMonth(e.target.value); setFilterMode('mes'); setSelectedDate(''); }}
-                            className={`px-4 pt-3 pb-1 rounded-lg text-sm font-bold border-0 focus:ring-2 focus:ring-indigo-500 outline-none transition-all h-full ${filterMode === 'mes' ? 'bg-white text-indigo-700 shadow-sm' : 'bg-transparent text-slate-500'}`}
-                        />
-                    </div>
-
-                    {/* Seletor de Dia */}
-                    <div className="relative group">
-                        <span className="absolute top-1 left-2 text-[8px] uppercase font-bold text-slate-400">Dia Específico</span>
-                        <input 
-                            type="date"
-                            value={selectedDate}
-                            onChange={(e) => { setSelectedDate(e.target.value); setFilterMode('data'); setSelectedMonth(''); }}
-                            className={`px-4 pt-3 pb-1 rounded-lg text-sm font-bold border-0 focus:ring-2 focus:ring-indigo-500 outline-none transition-all h-full ${filterMode === 'data' ? 'bg-white text-indigo-700 shadow-sm' : 'bg-transparent text-slate-500'}`}
-                        />
+                            onChange={(e) => {
+                                setSelectedMonth(e.target.value);
+                                setFilterMode('mes');
+                            }}
+                         />
                     </div>
                     
-                    {(filterMode === 'data' || filterMode === 'mes') && (
-                        <button
-                            onClick={handleClearFilters}
-                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-3 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1"
-                            title="Limpar Filtros"
-                        >
-                            <span className="text-lg leading-none">&times;</span>
-                        </button>
-                    )}
+                    {/* Filtro de Dia (Opcional) */}
+                    <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
+                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide px-1 mb-1">Dia Específico</label>
+                         <input 
+                            type="date" 
+                            className="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg block w-full p-2 outline-none focus:ring-2 focus:ring-indigo-500"
+                            value={selectedDate}
+                            onChange={(e) => {
+                                setSelectedDate(e.target.value);
+                                setFilterMode('data');
+                            }}
+                         />
+                    </div>
 
                     <button 
-                         onClick={() => setFilterMode('todos')}
-                         className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${filterMode === 'todos' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
+                        onClick={handleClearFilters}
+                        className="self-end px-4 py-2.5 text-sm font-bold text-slate-500 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition-colors"
                     >
-                        Visão Global
+                        Limpar
                     </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                {insights.map((insight, idx) => (
-                    <InsightCard key={idx} {...insight} />
-                ))}
+            {/* KPIs Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><ChartIcon className="w-16 h-16 text-indigo-600" /></div>
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Agendamentos</span>
+                    <span className="text-4xl font-extrabold text-slate-900 tracking-tighter">{totalAgendamentos}</span>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><SparklesIcon className="w-16 h-16 text-emerald-600" /></div>
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Taxa de Conclusão</span>
+                    <span className="text-4xl font-extrabold text-emerald-600 tracking-tighter">{Math.round(taxaConclusao)}%</span>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-32 relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><AlertIcon className="w-16 h-16 text-rose-600" /></div>
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Problemas / Falhas</span>
+                    <span className="text-4xl font-extrabold text-rose-600 tracking-tighter">{problemas}</span>
+                </div>
             </div>
 
-            {/* KPI Cards Minimalistas */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-                {[
-                    { label: 'Volume Total', value: totalAgendamentos, sub: 'Visitas', color: 'text-slate-800', border: 'border-indigo-500' },
-                    { label: 'Taxa Sucesso', value: `${taxaSucesso}%`, sub: 'Conclusão', color: 'text-emerald-600', border: 'border-emerald-500' },
-                    { label: 'Em Andamento', value: pendentes + emAndamento, sub: 'Ativas', color: 'text-amber-600', border: 'border-amber-500' },
-                    { label: 'Incidências', value: naoFinalizados, sub: 'Falhas', color: 'text-rose-600', border: 'border-rose-500' }
-                ].map((kpi, idx) => (
-                    <div key={idx} className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group">
-                        <div className={`absolute top-0 left-0 w-1 h-full ${kpi.border.replace('border-', 'bg-')}`}></div>
-                        <span className="text-slate-400 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">{kpi.label}</span>
-                        <div className={`mt-2 text-2xl sm:text-4xl font-extrabold ${kpi.color}`}>{kpi.value}</div>
-                        <div className="text-xs text-slate-400 mt-1 font-medium">{kpi.sub}</div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Plano de Melhorias */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-50 to-violet-50 px-6 sm:px-8 py-4 sm:py-6 border-b border-indigo-100/50">
-                    <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
-                        <SparklesIcon className="w-5 h-5 text-indigo-600" />
-                        Diagnóstico Inteligente
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Gráfico de Barras - Cidades */}
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 lg:col-span-2">
+                    <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                        <span className="w-2 h-6 bg-indigo-500 rounded-full"></span>
+                        Volume por Cidade
                     </h3>
-                </div>
-                
-                {oportunidadesMelhoria.length === 0 ? (
-                    <div className="p-12 text-center flex flex-col items-center">
-                        <div className="w-16 h-16 bg-emerald-50 text-2xl flex items-center justify-center rounded-full mb-4">🏆</div>
-                        <h4 className="text-slate-800 font-bold">Excelente!</h4>
-                        <p className="text-slate-500 text-sm mt-1">Nenhum gap crítico detectado nos dados atuais.</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100">
-                        {oportunidadesMelhoria.map((item, idx) => (
-                            <div key={idx} className="p-4 sm:p-8 hover:bg-slate-50/50 transition-colors">
-                                <div className="flex justify-between items-start mb-4">
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 border border-slate-200 px-2 py-1 rounded-md">{item.area}</span>
-                                    <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
-                                        item.prioridade === 'Alta' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
-                                    }`}>
-                                        {item.prioridade} Prioridade
-                                    </span>
-                                </div>
-                                <h4 className="font-bold text-slate-800 mb-3 text-lg leading-tight">{item.acao}</h4>
-                                <div className="space-y-3">
-                                    <div className="text-xs text-rose-600 bg-rose-50/50 p-3 rounded-lg border border-rose-100 flex gap-2">
-                                        <AlertIcon className="w-4 h-4 shrink-0" />
-                                        {item.problema}
-                                    </div>
-                                    <div className="text-xs text-emerald-700 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 font-medium">
-                                        Impacto: {item.impacto}
-                                    </div>
-                                </div>
-                            </div>
+                    <div className="space-y-4">
+                        {sortedCities.map(([city, count]) => (
+                            <ProgressBar 
+                                key={city} 
+                                label={city} 
+                                value={(count / totalAgendamentos) * 100} 
+                                showValue={false}
+                                color="bg-indigo-500"
+                            />
                         ))}
+                        {sortedCities.length === 0 && <div className="text-center text-slate-400 text-sm py-10">Sem dados para exibir</div>}
                     </div>
-                )}
+                </div>
+
+                {/* Status Donut Chart (Simulated with Bars for simplicity/performance) */}
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                     <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                        <span className="w-2 h-6 bg-emerald-500 rounded-full"></span>
+                        Status de Execução
+                    </h3>
+                    <div className="space-y-4">
+                        <ProgressBar label="Concluído" value={((statusCounts['Concluído'] || 0) / totalAgendamentos) * 100} color="bg-emerald-500" />
+                        <ProgressBar label="Em Andamento" value={((statusCounts['Em Andamento'] || 0) / totalAgendamentos) * 100} color="bg-amber-500" />
+                        <ProgressBar label="Pendente" value={((statusCounts['Pendente'] || 0) / totalAgendamentos) * 100} color="bg-slate-400" />
+                        <ProgressBar label="Não Finalizado" value={((statusCounts['Não Finalizado'] || 0) / totalAgendamentos) * 100} color="bg-rose-500" />
+                    </div>
+                </div>
             </div>
 
-            {/* Gráficos */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-                
-                {/* Saturação */}
-                <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-800 mb-8">Capacidade vs Demanda</h3>
-                    <div className="space-y-6">
-                        {listaCidades.map((cid, idx) => {
-                            const percentualSaturacao = Math.min((cid.agendamentos / (cid.capacidadeDiaria || 1)) * 100, 100);
-                            const corBarra = percentualSaturacao > 80 ? 'bg-rose-500 shadow-rose-200' : percentualSaturacao > 50 ? 'bg-indigo-500 shadow-indigo-200' : 'bg-emerald-500 shadow-emerald-200';
-                            
-                            return (
-                                <div key={idx}>
-                                    <div className="flex justify-between text-sm mb-2">
-                                        <span className="font-semibold text-slate-700">{cid.nome}</span>
-                                        <div className="text-xs font-mono text-slate-400">
-                                            {cid.agendamentos} <span className="text-slate-300">/</span> {cid.capacidadeDiaria}
-                                        </div>
-                                    </div>
-                                    <div className="relative w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-                                        <div 
-                                            className={`h-full rounded-full transition-all duration-1000 shadow-md ${corBarra}`} 
-                                            style={{ width: `${percentualSaturacao}%` }}
-                                        ></div>
-                                    </div>
-                                </div>
-                            );
-                        })}
+            {/* RELATÓRIO MENSAL DETALHADO */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                            <TableIcon className="w-5 h-5 text-indigo-600" />
+                            Relatório Detalhado
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Listagem completa referente a <strong>{selectedMonth ? selectedMonth : 'Todo o Período'}</strong>
+                        </p>
                     </div>
                 </div>
-
-                {/* Pareto */}
-                <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-800 mb-8">Motivos de Falha</h3>
-                    {chartMotivos.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                            <span className="text-slate-400 text-sm font-medium">Sem dados de falha registrados</span>
-                        </div>
-                    ) : (
-                        <div className="space-y-6">
-                            {chartMotivos.map((m, idx) => (
-                                <div key={idx}>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-sm font-semibold text-slate-700">{m.motivo}</span>
-                                        <span className="text-xs font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded">{m.qtd}</span>
-                                    </div>
-                                    <ProgressBar value={(m.qtd / (naoFinalizados || 1)) * 100} color="bg-rose-400" showValue={false} />
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-            </div>
-
-             {/* Relatório Mensal Detalhado (Substituindo apenas Incidências) */}
-             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="px-6 sm:px-8 py-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50/30 gap-4">
-                    <div className="flex items-center gap-3">
-                         <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-indigo-600">
-                             <TableIcon className="w-5 h-5" />
-                         </div>
-                         <div>
-                             <h3 className="text-lg font-bold text-slate-800">
-                                {filterMode === 'mes' ? 'Relatório Mensal' : filterMode === 'data' ? 'Relatório Diário' : 'Histórico Completo'}
-                             </h3>
-                             <p className="text-xs text-slate-500">Listagem completa dos agendamentos filtrados</p>
-                         </div>
-                    </div>
-                    <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm shadow-indigo-200">
-                        {filteredAgendamentos.length} Registros
-                    </span>
-                </div>
                 
-                {filteredAgendamentos.length === 0 ? (
-                     <div className="p-12 text-center text-slate-400 flex flex-col items-center">
-                         <span className="text-4xl mb-2 opacity-50">📅</span>
-                         <p className="italic">Nenhum agendamento encontrado para este período.</p>
-                     </div>
-                ) : (
-                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-                        <table className="w-full text-sm text-left border-collapse">
-                            <thead className="text-xs text-slate-500 font-semibold uppercase bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
-                                <tr>
-                                    <th className="px-6 py-4 bg-slate-50">Data / Período</th>
-                                    <th className="px-6 py-4 bg-slate-50">Cidade</th>
-                                    <th className="px-6 py-4 bg-slate-50">Cliente / Contato</th>
-                                    <th className="px-6 py-4 bg-slate-50">Técnico / Atividade</th>
-                                    <th className="px-6 py-4 bg-slate-50 text-center">Status</th>
-                                    <th className="px-6 py-4 bg-slate-50">Obs / Motivo</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {filteredAgendamentos.sort((a,b) => b.data.localeCompare(a.data)).map((item) => (
-                                    <tr key={item.id} className="bg-white hover:bg-slate-50 transition-colors group">
-                                        
-                                        {/* Data e Período */}
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="font-bold text-slate-700 text-xs sm:text-sm">{item.data.split('-').reverse().join('/')}</div>
-                                            <div className="text-[10px] text-slate-500 uppercase font-medium bg-slate-100 px-2 py-0.5 rounded w-fit mt-1">
-                                                {item.periodo.split('(')[0]}
-                                            </div>
-                                        </td>
-
-                                        {/* Cidade */}
-                                        <td className="px-6 py-4 font-medium text-slate-600">
-                                            {item.cidade}
-                                        </td>
-
-                                        {/* Cliente */}
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider border-b border-slate-100">
+                            <tr>
+                                <th className="px-6 py-4">Data / Período</th>
+                                <th className="px-6 py-4">Cidade</th>
+                                <th className="px-6 py-4">Cliente</th>
+                                <th className="px-6 py-4">Técnico</th>
+                                <th className="px-6 py-4">Atividade</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4">Motivo / Obs</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {filteredAgendamentos.length > 0 ? (
+                                filteredAgendamentos.map((ag) => (
+                                    <tr key={ag.id} className="hover:bg-slate-50/80 transition-colors">
                                         <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-800">{item.cliente}</div>
-                                            <div className="text-xs text-slate-400 mt-0.5 font-mono">{item.telefone}</div>
+                                            <div className="font-bold text-slate-700">{ag.data.split('-').reverse().join('/')}</div>
+                                            <div className="text-xs text-slate-400">{ag.periodo.split('(')[0]}</div>
                                         </td>
-
-                                        {/* Técnico e Atividade */}
+                                        <td className="px-6 py-4 text-slate-600 font-medium">{ag.cidade}</td>
+                                        <td className="px-6 py-4 text-slate-800 font-bold">
+                                            {ag.cliente}
+                                            {/* Telefone removido conforme solicitado */}
+                                        </td>
+                                        <td className="px-6 py-4 text-indigo-600 font-medium">{ag.tecnicoNome}</td>
+                                        <td className="px-6 py-4 text-slate-600">{ag.atividade}</td>
                                         <td className="px-6 py-4">
-                                            <div className="text-indigo-600 font-bold">{item.tecnicoNome}</div>
-                                            <div className="text-xs text-slate-500 mt-0.5">{item.atividade}</div>
-                                        </td>
-
-                                        {/* Status Badge */}
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
-                                                item.statusExecucao === 'Concluído' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                                item.statusExecucao === 'Não Finalizado' ? 'bg-rose-50 text-rose-700 border-rose-100' :
-                                                item.statusExecucao === 'Em Andamento' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                                'bg-slate-100 text-slate-500 border-slate-200'
+                                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
+                                                ag.statusExecucao === 'Concluído' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                                ag.statusExecucao === 'Não Finalizado' ? 'bg-rose-50 text-rose-700 border-rose-100' :
+                                                ag.statusExecucao === 'Em Andamento' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                                'bg-slate-100 text-slate-600 border-slate-200'
                                             }`}>
-                                                {item.statusExecucao}
+                                                {ag.statusExecucao}
                                             </span>
                                         </td>
-
-                                        {/* Motivo / Obs */}
-                                        <td className="px-6 py-4">
-                                            {item.statusExecucao === 'Não Finalizado' ? (
-                                                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded border border-rose-100 inline-block">
-                                                    {item.motivoNaoConclusao || 'Motivo não informado'}
-                                                </span>
-                                            ) : item.tipo === 'PRE_AGENDAMENTO' ? (
-                                                <span className="text-[10px] text-amber-600 font-medium">Reserva Temporária</span>
-                                            ) : (
-                                                <span className="text-slate-300 text-xs">-</span>
-                                            )}
+                                        <td className="px-6 py-4 text-xs text-slate-500 max-w-[200px] truncate">
+                                            {ag.statusExecucao === 'Não Finalizado' 
+                                                ? <span className="text-rose-600 font-bold">{ag.motivoNaoConclusao || 'Não informado'}</span> 
+                                                : <span className="opacity-50">-</span>
+                                            }
                                         </td>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-10 text-center text-slate-400 italic">
+                                        Nenhum agendamento encontrado para este período.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Gaps e Oportunidades */}
+            <h3 className="font-bold text-slate-800 mt-8 mb-4">Insights e Oportunidades</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {idleTechs.length > 0 ? (
+                    <InsightCard 
+                        type="info" 
+                        title="Ociosidade Identificada" 
+                        message={`${idleTechs.length} técnicos não possuem agendamentos neste período (${idleTechs.map(t => t.nome.split(' ')[0]).join(', ')}). Considere remanejar atendimentos.`} 
+                    />
+                ) : (
+                    <InsightCard type="success" title="Alta Ocupação" message="Todos os técnicos estão ativos neste período." />
+                )}
+                
+                {problemas > (totalAgendamentos * 0.2) && (
+                    <InsightCard 
+                        type="danger" 
+                        title="Alto Índice de Problemas" 
+                        message={`A taxa de falhas está acima de 20% (${Math.round((problemas/totalAgendamentos)*100)}%). Verifique os motivos de "Não Finalizado" na tabela acima.`} 
+                    />
                 )}
             </div>
         </div>

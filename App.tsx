@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import BookingForm from './components/BookingForm';
 import SheetEditor from './components/SheetEditor';
@@ -8,15 +9,15 @@ import { getSheetData, setFullData, removeAgendamento, confirmarPreAgendamento, 
 import { UserProfile } from './types';
 
 // --- BRANDING COMPONENT ---
-const BayoLogo = ({ className }: { className?: string }) => (
+const BrayoLogo = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <linearGradient id="bayo_gradient" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+      <linearGradient id="brayo_gradient" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
         <stop stopColor="#4F46E5" /> {/* Indigo 600 */}
         <stop offset="1" stopColor="#0F172A" /> {/* Slate 900 */}
       </linearGradient>
     </defs>
-    <rect width="100" height="100" rx="28" fill="url(#bayo_gradient)" />
+    <rect width="100" height="100" rx="28" fill="url(#brayo_gradient)" />
     {/* Stylized 'B' / Lightning shape */}
     <path d="M35 28H58C68 28 72 32 72 40C72 47 67 50 60 50H45L40 75H30L35 28Z" fill="white" fillOpacity="0.9" />
     <path d="M72 40C72 44 70 50 60 50M60 50L65 50C75 50 80 55 80 65C80 75 72 80 60 80H42" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.3" />
@@ -171,9 +172,13 @@ function App() {
       e.preventDefault();
       const db = getSheetData();
       
-      const user = db.usuarios.find(u => u.nome === loginUser);
+      // FIX LOGIN: Remover espaços em branco (comum no mobile) e ignorar Case Sensitive no USUÁRIO
+      const inputUser = loginUser.trim();
+      const inputPass = loginPass.trim();
 
-      if (user && user.senha === loginPass) {
+      const user = db.usuarios.find(u => u.nome.toLowerCase() === inputUser.toLowerCase());
+
+      if (user && user.senha === inputPass) {
           const session = { nome: user.nome, perfil: user.perfil || 'user' };
           setCurrentUser(session);
           sessionStorage.setItem('app_global_session', JSON.stringify(session));
@@ -181,7 +186,7 @@ function App() {
           setView('form');
           addLog(user.nome, 'Login', 'Usuário acessou o sistema');
       } else {
-          setLoginError('Credenciais inválidas.');
+          setLoginError('Credenciais inválidas. Verifique usuário e senha.');
       }
   }
 
@@ -286,12 +291,13 @@ function App() {
         const expiredItems = expirePreBookings();
         
         if (expiredItems.length > 0) {
-             expiredItems.forEach(ag => {
+             expiredItems.forEach((ag, idx) => {
                 const title = "Reserva Expirada";
                 const msg = `O pré-agendamento de ${ag.cliente} foi cancelado automaticamente.`;
                 
+                // Usando ID único para evitar conflitos se múltiplos expirarem
                 setNotification({
-                    id: Date.now().toString(),
+                    id: `${Date.now()}-${idx}`,
                     title: title,
                     message: msg,
                     type: 'error'
@@ -351,10 +357,10 @@ function App() {
 
                <div className="flex flex-col items-center justify-center w-full max-w-md bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-300/60 border border-white/50 p-8 sm:p-12 z-10">
                   <div className="mb-6 transform hover:scale-105 transition-transform duration-500">
-                    <BayoLogo className="w-24 h-24 drop-shadow-xl" />
+                    <BrayoLogo className="w-24 h-24 drop-shadow-xl" />
                   </div>
                   
-                  <h1 className="text-3xl font-extrabold text-slate-900 mb-1 tracking-tight">Bayo</h1>
+                  <h1 className="text-3xl font-extrabold text-slate-900 mb-1 tracking-tight">Brayo</h1>
                   <p className="text-xs text-indigo-500 font-bold uppercase tracking-widest mb-8">Gestão de Visitas</p>
                   
                   <form onSubmit={handleLogin} className="space-y-5 w-full">
@@ -393,7 +399,7 @@ function App() {
                       </button>
                   </form>
                   <p className="mt-8 text-[10px] text-slate-400 text-center">
-                      © 2025 Bayo Systems. Todos os direitos reservados.
+                      © 2025 Brayo Systems. Todos os direitos reservados.
                   </p>
                </div>
           </div>
@@ -445,10 +451,10 @@ function App() {
             
             {/* Logo Section */}
             <div className="flex items-center gap-3 shrink-0">
-              <BayoLogo className="w-8 h-8 sm:w-10 sm:h-10 shadow-sm rounded-lg" />
+              <BrayoLogo className="w-8 h-8 sm:w-10 sm:h-10 shadow-sm rounded-lg" />
               <div className="flex flex-col justify-center">
                 <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 leading-none">
-                  Bayo
+                  Brayo
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500 leading-none mt-0.5">
                     Gestão

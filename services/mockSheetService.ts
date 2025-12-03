@@ -225,8 +225,19 @@ export const expirePreBookings = (): Agendamento[] => {
     const EXPIRATION_LIMIT = 30 * 60 * 1000; 
 
     data.agendamentos.forEach(ag => {
-        if (ag.tipo === 'PRE_AGENDAMENTO' && ag.criadoEm) {
+        if (ag.tipo === 'PRE_AGENDAMENTO') {
+            // Se não tiver data de criação ou data inválida, expira imediatamente para limpar
+            if (!ag.criadoEm) {
+                 expired.push(ag);
+                 return;
+            }
+            
             const created = new Date(ag.criadoEm).getTime();
+            if (isNaN(created)) {
+                expired.push(ag);
+                return;
+            }
+
             if ((now - created) >= EXPIRATION_LIMIT) {
                 expired.push(ag);
                 return; // Não adiciona na lista active

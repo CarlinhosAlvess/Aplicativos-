@@ -232,7 +232,8 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
           (newAgendamentos[index] as any)[field] = value;
       }
 
-      // Lógica específica para status execucao
+      // Lógica específica para status execucao:
+      // Se mudar para qualquer coisa diferente de "Não Finalizado", limpa o motivo
       if (field === 'statusExecucao' && value !== 'Não Finalizado') {
           newAgendamentos[index].motivoNaoConclusao = '';
       }
@@ -445,7 +446,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                             {tech.cidades.map((city, cIdx) => (
                                 <span key={cIdx} className="bg-white border border-slate-200 text-slate-600 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm">
                                     {city}
-                                    <button type="button" onClick={() => handleRemoveCityFromTech(idx, city)} className="text-slate-400 hover:text-rose-500 transition-colors">×</button>
+                                    <button onClick={() => handleRemoveCityFromTech(idx, city)} className="text-slate-400 hover:text-rose-500 transition-colors" type="button">×</button>
                                 </span>
                             ))}
                             {newCityInput?.techIndex === idx ? (
@@ -671,7 +672,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                                             if (isEditing) {
                                                 handleSave(); // Explicit save when finishing edit
                                                 setEditingAgendamentoId(null);
-                                                addLog(currentUser.nome, 'Editar Agendamento', `ID: ${ag.id}`);
+                                                addLog(currentUser.nome, 'Editar Agendamento', `ID: ${ag.id}, Cliente: ${ag.cliente}`);
                                             } else {
                                                 setEditingAgendamentoId(ag.id);
                                             }
@@ -804,8 +805,8 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                                 <td className="p-3">
                                     {ag.statusExecucao === 'Não Finalizado' ? (
                                         <input 
-                                            className="w-full p-2 bg-rose-50 border border-rose-100 rounded text-rose-800 text-xs placeholder-rose-300 outline-none focus:ring-1 focus:ring-rose-300"
-                                            placeholder="Motivo da falha..."
+                                            className="w-full p-2 bg-rose-50 border border-rose-200 rounded text-rose-800 text-xs placeholder-rose-300 outline-none focus:ring-1 focus:ring-rose-300 transition-colors"
+                                            placeholder="Motivo obrigatório..."
                                             value={ag.motivoNaoConclusao || ''}
                                             onChange={(e) => handleMotivoChange(realIdx, e.target.value)}
                                         />
