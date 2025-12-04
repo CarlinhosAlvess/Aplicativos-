@@ -9,6 +9,12 @@ export type StatusExecucao = 'Pendente' | 'Em Andamento' | 'Concluído' | 'Não 
 
 export type UserProfile = 'admin' | 'user';
 
+export interface UsuarioPermissoes {
+  agendamento: boolean;
+  dashboard: boolean;
+  planilha: boolean;
+}
+
 export interface Tecnico {
   id: string;
   nome: string;
@@ -50,6 +56,7 @@ export interface Usuario {
   nome: string;
   senha: string;
   perfil: UserProfile;
+  permissoes: UsuarioPermissoes; // Controle granular de acesso
 }
 
 export interface LogEntry {

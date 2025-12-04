@@ -116,6 +116,9 @@ const Dashboard = () => {
         return !hasWork;
     });
 
+    // Filtra apenas os falhados para a tabela de alerta
+    const failedAppointments = filteredAgendamentos.filter(a => a.statusExecucao === 'Não Finalizado');
+
     return (
         <div className="space-y-6 sm:space-y-8 pb-10">
             {/* Header e Filtros */}
@@ -217,6 +220,47 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* SEÇÃO DE ALERTAS DE FALHA (NOVA) */}
+            {failedAppointments.length > 0 && (
+                <div className="bg-rose-50 border border-rose-100 rounded-3xl shadow-sm overflow-hidden animate-fade-in-up">
+                    <div className="p-6 border-b border-rose-100 flex items-center gap-3">
+                        <div className="bg-rose-100 p-2 rounded-full text-rose-600 animate-pulse">
+                            <AlertIcon className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-rose-900 text-lg">Alertas de Falha</h3>
+                            <p className="text-xs text-rose-700 mt-1">
+                                <strong>Atenção:</strong> {failedAppointments.length} agendamentos marcados como "Não Finalizado". Acompanhe os motivos abaixo.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-rose-100/50 text-rose-800 font-bold text-xs uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-3">Motivo da Falha</th>
+                                    <th className="px-6 py-3">Data</th>
+                                    <th className="px-6 py-3">Cliente</th>
+                                    <th className="px-6 py-3">Técnico</th>
+                                    <th className="px-6 py-3">Cidade</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-rose-100">
+                                {failedAppointments.map((ag) => (
+                                    <tr key={ag.id} className="hover:bg-rose-100/30 transition-colors">
+                                        <td className="px-6 py-3 font-bold text-rose-700">{ag.motivoNaoConclusao || 'Não informado'}</td>
+                                        <td className="px-6 py-3 text-rose-900 font-mono text-xs">{ag.data.split('-').reverse().join('/')}</td>
+                                        <td className="px-6 py-3 text-rose-900">{ag.cliente}</td>
+                                        <td className="px-6 py-3 text-rose-800">{ag.tecnicoNome}</td>
+                                        <td className="px-6 py-3 text-rose-800">{ag.cidade}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* RELATÓRIO MENSAL DETALHADO */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">

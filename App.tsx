@@ -6,7 +6,7 @@ import Dashboard from './components/Dashboard';
 import { TableIcon, EditIcon, ChartIcon, AlertIcon, LockIcon } from './components/Icons';
 import { loadFromCloud, saveToCloud } from './services/cloudService';
 import { getSheetData, setFullData, removeAgendamento, confirmarPreAgendamento, expirePreBookings, addLog, getUniqueCities } from './services/mockSheetService';
-import { UserProfile } from './types';
+import { UserProfile, UsuarioPermissoes } from './types';
 
 // --- BRANDING COMPONENT ---
 const BrayoLogo = ({ className }: { className?: string }) => (
@@ -137,6 +137,7 @@ const sendNativeNotification = (title: string, body: string) => {
 interface UserSession {
     nome: string;
     perfil: UserProfile;
+    permissoes: UsuarioPermissoes;
 }
 
 function App() {
@@ -172,18 +173,26 @@ function App() {
       e.preventDefault();
       const db = getSheetData();
       
-      // FIX LOGIN: Remover espaços em branco (comum no mobile) e ignorar Case Sensitive no USUÁRIO
       const inputUser = loginUser.trim();
       const inputPass = loginPass.trim();
 
       const user = db.usuarios.find(u => u.nome.toLowerCase() === inputUser.toLowerCase());
 
       if (user && user.senha === inputPass) {
-          const session = { nome: user.nome, perfil: user.perfil || 'user' };
+          const session: UserSession = { 
+              nome: user.nome, 
+              perfil: user.perfil || 'user',
+              permissoes: user.permissoes || { agendamento: true, dashboard: true, planilha: false }
+          };
           setCurrentUser(session);
           sessionStorage.setItem('app_global_session', JSON.stringify(session));
           setLoginError('');
-          setView('form');
+          
+          // Redireciona para a primeira view permitida
+          if (session.permissoes.agendamento) setView('form');
+          else if (session.permissoes.dashboard) setView('dashboard');
+          else if (session.permissoes.planilha) setView('sheet');
+          
           addLog(user.nome, 'Login', 'Usuário acessou o sistema');
       } else {
           setLoginError('Credenciais inválidas. Verifique usuário e senha.');
@@ -295,7 +304,6 @@ function App() {
                 const title = "Reserva Expirada";
                 const msg = `O pré-agendamento de ${ag.cliente} foi cancelado automaticamente.`;
                 
-                // Usando ID único para evitar conflitos se múltiplos expirarem
                 setNotification({
                     id: `${Date.now()}-${idx}`,
                     title: title,
@@ -341,11 +349,9 @@ function App() {
       }
   };
 
-  // --- LOGIN SCREEN ---
   if (!currentUser) {
       return (
           <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
-               {/* Background decoration */}
                <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
                    <svg width="100%" height="100%">
                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -407,6 +413,7 @@ function App() {
   }
 
   const isAdmin = currentUser.perfil === 'admin';
+  const perms = currentUser.permissoes;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 relative font-sans">
@@ -470,8 +477,10 @@ function App() {
               </div>
 
               <button
-                onClick={() => setView('form')}
+                onClick={() => perms.agendamento && setView('form')}
+                disabled={!perms.agendamento}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                  !perms.agendamento ? 'opacity-30 cursor-not-allowed hidden' : 
                   view === 'form' 
                   ? 'bg-slate-900 text-white shadow-md shadow-slate-200' 
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -482,8 +491,10 @@ function App() {
               </button>
 
               <button
-                onClick={() => setView('dashboard')}
+                onClick={() => perms.dashboard && setView('dashboard')}
+                disabled={!perms.dashboard}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                  !perms.dashboard ? 'opacity-30 cursor-not-allowed hidden' :
                   view === 'dashboard' 
                   ? 'bg-slate-900 text-white shadow-md shadow-slate-200' 
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -494,18 +505,18 @@ function App() {
               </button>
 
               <button
-                onClick={() => isAdmin && setView('sheet')}
-                disabled={!isAdmin}
+                onClick={() => perms.planilha && setView('sheet')}
+                disabled={!perms.planilha}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
-                    !isAdmin 
+                    !perms.planilha 
                     ? 'opacity-50 cursor-not-allowed text-slate-400'
                     : view === 'sheet' 
                         ? 'bg-slate-900 text-white shadow-md shadow-slate-200' 
                         : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
-                title={!isAdmin ? "Acesso restrito a administradores" : "Planilha"}
+                title={!perms.planilha ? "Acesso restrito" : "Planilha"}
               >
-                {!isAdmin ? <LockIcon className="w-4 h-4" /> : <TableIcon className="w-5 h-5 sm:w-4 sm:h-4" />}
+                {!perms.planilha ? <LockIcon className="w-4 h-4" /> : <TableIcon className="w-5 h-5 sm:w-4 sm:h-4" />}
                 <span className="hidden sm:inline">Planilha</span>
               </button>
 
@@ -523,7 +534,7 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
-        {view === 'form' && (
+        {view === 'form' && perms.agendamento && (
           <div className="animate-fade-in-up">
             <div className="text-center mb-6 sm:mb-8">
               <h1 className="text-xl sm:text-4xl font-extrabold text-slate-800 tracking-tight">
@@ -535,7 +546,7 @@ function App() {
           </div>
         )}
 
-        {view === 'sheet' && isAdmin && (
+        {view === 'sheet' && perms.planilha && (
           <div className="animate-fade-in-up h-[calc(100vh-140px)] sm:h-auto">
             <div className="mb-4 sm:mb-8 flex items-center justify-between">
                 <div>
@@ -552,7 +563,7 @@ function App() {
           </div>
         )}
 
-        {view === 'dashboard' && (
+        {view === 'dashboard' && perms.dashboard && (
            <div className="animate-fade-in-up">
               <Dashboard />
            </div>

@@ -78,10 +78,30 @@ const INITIAL_DATA: DatabaseSchema = {
     "Campinas", "Jundiaí", "Sorocaba", "Santos"
   ],
   usuarios: [
-    { nome: "Administrador", senha: "1234", perfil: "admin" },
-    { nome: "Atendente 1", senha: "123", perfil: "user" },
-    { nome: "Atendente 2", senha: "123", perfil: "user" },
-    { nome: "Gerente", senha: "123", perfil: "admin" }
+    { 
+        nome: "Administrador", 
+        senha: "1234", 
+        perfil: "admin",
+        permissoes: { agendamento: true, dashboard: true, planilha: true }
+    },
+    { 
+        nome: "Atendente 1", 
+        senha: "123", 
+        perfil: "user",
+        permissoes: { agendamento: true, dashboard: true, planilha: false }
+    },
+    { 
+        nome: "Atendente 2", 
+        senha: "123", 
+        perfil: "user",
+        permissoes: { agendamento: true, dashboard: true, planilha: false }
+    },
+    { 
+        nome: "Gerente", 
+        senha: "123", 
+        perfil: "admin",
+        permissoes: { agendamento: true, dashboard: true, planilha: true }
+    }
   ],
   feriados: [
       "2025-12-25", // Natal
@@ -94,7 +114,7 @@ const INITIAL_DATA: DatabaseSchema = {
         cliente: 'Roberto Souza',
         telefone: '11999999999',
         cidade: 'São Paulo',
-        data: getTodayString(),
+        data: '2024-01-01', // Data passada
         periodo: Periodo.MANHA,
         tecnicoId: '1',
         tecnicoNome: 'João Silva',
@@ -110,7 +130,7 @@ const INITIAL_DATA: DatabaseSchema = {
         cliente: 'Ana Paula',
         telefone: '11988888888',
         cidade: 'Guarulhos',
-        data: getTodayString(),
+        data: '2024-01-01', // Data passada
         periodo: Periodo.TARDE,
         tecnicoId: '1',
         tecnicoNome: 'João Silva',
@@ -134,12 +154,26 @@ export const getSheetData = (): DatabaseSchema => {
         const parsed = JSON.parse(data);
         
         // --- Migrações de Schema ---
-        if (parsed.usuarios && parsed.usuarios.length > 0 && typeof parsed.usuarios[0] === 'string') {
-            parsed.usuarios = parsed.usuarios.map((u: string) => ({ nome: u, senha: '123', perfil: 'user' }));
-        }
-        // Migração de perfil
-        if (parsed.usuarios && parsed.usuarios.length > 0 && typeof parsed.usuarios[0] === 'object' && !parsed.usuarios[0].perfil) {
-             parsed.usuarios = parsed.usuarios.map((u: any) => ({ ...u, perfil: u.nome === 'Administrador' ? 'admin' : 'user' }));
+        if (parsed.usuarios && parsed.usuarios.length > 0) {
+            // Migração de perfil e permissões
+            parsed.usuarios = parsed.usuarios.map((u: any) => {
+                const updatedUser = { ...u };
+                
+                // Garante perfil
+                if (!updatedUser.perfil) {
+                    updatedUser.perfil = updatedUser.nome === 'Administrador' ? 'admin' : 'user';
+                }
+
+                // Garante permissões baseado no perfil se não existir
+                if (!updatedUser.permissoes) {
+                    updatedUser.permissoes = {
+                        agendamento: true,
+                        dashboard: true,
+                        planilha: updatedUser.perfil === 'admin'
+                    };
+                }
+                return updatedUser;
+            });
         }
 
         if (parsed.tecnicos.length > 0) {
@@ -157,10 +191,8 @@ export const getSheetData = (): DatabaseSchema => {
         if (!parsed.usuarios) parsed.usuarios = INITIAL_DATA.usuarios;
         if (!parsed.logs) parsed.logs = [];
         
-        // Garantir campo apiToken
         if (typeof parsed.apiToken === 'undefined') parsed.apiToken = "";
 
-        // Migração para incluir 'tipo' e 'criadoEm'
         parsed.agendamentos = parsed.agendamentos.map((ag: any) => ({
             ...ag,
             tipo: ag.tipo || 'PADRAO',
@@ -177,7 +209,6 @@ export const getSheetData = (): DatabaseSchema => {
 
 export const saveSheetData = (data: DatabaseSchema) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  // Dispara evento para avisar outros componentes que os dados mudaram
   window.dispatchEvent(new Event('localDataChanged'));
 };
 
@@ -190,66 +221,62 @@ export const addLog = (usuario: string, acao: string, detalhes: string) => {
         acao,
         detalhes
     };
-    // Mantém apenas os últimos 500 logs para não pesar
     const updatedLogs = [newLog, ...(data.logs || [])].slice(0, 500);
     data.logs = updatedLogs;
     saveSheetData(data);
 };
 
-// Nova função para atualizar tudo (usado pelo sync da nuvem)
 export const setFullData = (data: DatabaseSchema) => {
     saveSheetData(data);
 };
 
 export const addAgendamento = (agendamento: Agendamento) => {
   const data = getSheetData();
-  data.agendamentos.push(agendamento);
+  
+  // Garante que o motivoNaoConclusao seja inicializado como string vazia se estiver indefinido
+  const sanitizedAgendamento = {
+      ...agendamento,
+      motivoNaoConclusao: agendamento.motivoNaoConclusao || ''
+  };
+
+  data.agendamentos.push(sanitizedAgendamento);
   saveSheetData(data);
 };
 
-// Remove agendamentos especificos (usado na expiracao manual ou edicao)
 export const removeAgendamento = (id: string) => {
     const data = getSheetData();
     data.agendamentos = data.agendamentos.filter(a => a.id !== id);
     saveSheetData(data);
 };
 
-// Função em lote para verificar e remover expirados
 export const expirePreBookings = (): Agendamento[] => {
     const data = getSheetData();
     const now = Date.now();
     const active: Agendamento[] = [];
     const expired: Agendamento[] = [];
-    
-    // Limite de 30 minutos em milissegundos
     const EXPIRATION_LIMIT = 30 * 60 * 1000; 
 
     data.agendamentos.forEach(ag => {
         if (ag.tipo === 'PRE_AGENDAMENTO') {
-            // Se não tiver data de criação ou data inválida, expira imediatamente para limpar
             if (!ag.criadoEm) {
                  expired.push(ag);
                  return;
             }
-            
             const created = new Date(ag.criadoEm).getTime();
             if (isNaN(created)) {
                 expired.push(ag);
                 return;
             }
-
             if ((now - created) >= EXPIRATION_LIMIT) {
                 expired.push(ag);
-                return; // Não adiciona na lista active
+                return; 
             }
         }
         active.push(ag);
     });
 
-    // Se houve remoções, salva o novo estado
     if (expired.length > 0) {
         data.agendamentos = active;
-        // Log sistema
         addLog('Sistema', 'Expiração Automática', `Removeu ${expired.length} pré-agendamentos expirados.`);
         saveSheetData(data);
     }
@@ -257,7 +284,6 @@ export const expirePreBookings = (): Agendamento[] => {
     return expired;
 };
 
-// Confirma um pré-agendamento transformando em padrão
 export const confirmarPreAgendamento = (id: string) => {
     const data = getSheetData();
     const index = data.agendamentos.findIndex(a => a.id === id);
@@ -271,11 +297,10 @@ export const confirmarPreAgendamento = (id: string) => {
 
 export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo: Periodo): TecnicoDisponivel[] => {
   const db = getSheetData();
-  
-  // Parse seguro da data para garantir o dia da semana correto (Local Time)
   const [year, month, day] = dataStr.split('-').map(Number);
+  // Importante: criar a data corretamente sem fuso horário para pegar o dia da semana correto
   const dateObj = new Date(year, month - 1, day);
-  const dayOfWeek = dateObj.getDay(); // 0 = Domingo, 6 = Sábado
+  const dayOfWeek = dateObj.getDay(); 
   
   const isSaturday = dayOfWeek === 6;
   const isSunday = dayOfWeek === 0;
@@ -289,24 +314,21 @@ export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo
     let capacity = 0;
     let appointmentsCount = 0;
 
-    // Lógica de Prioridade: Feriado > Sábado > Domingo > Dia Útil
     if (isHoliday) {
-        // Capacidade TOTAL do dia
+        // Capacidade Total do dia (independente de periodo)
         capacity = Number(tech.capacidadeFeriado ?? 0);
-        // Conta agendamentos de TODO o dia, independente do período
+        // Conta todos os agendamentos do dia para este técnico
         appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else if (isSaturday) {
-        // Capacidade TOTAL do dia
+        // Capacidade Total do Sábado (independente de periodo)
         capacity = Number(tech.capacidadeSabado ?? 0);
-        // Conta agendamentos de TODO o dia, independente do período
         appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else if (isSunday) {
-        // Capacidade TOTAL do dia
+        // Capacidade Total do Domingo (independente de periodo)
         capacity = Number(tech.capacidadeDomingo ?? 0);
-        // Conta agendamentos de TODO o dia, independente do período
         appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else {
-        // Dia Útil: Capacidade por Período
+        // Dia de semana comum: Capacidade por Período
         if (periodo === Periodo.MANHA) capacity = Number(tech.capacidadeManha);
         else if (periodo === Periodo.TARDE) capacity = Number(tech.capacidadeTarde);
         else if (periodo === Periodo.NOITE) capacity = Number(tech.capacidadeNoite ?? 0);
@@ -327,8 +349,27 @@ export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo
 
 export const getAvailablePeriods = (cidade: string, dataStr: string): Periodo[] => {
     if (!cidade || !dataStr) return [];
+    const today = new Date();
+    const [year, month, day] = dataStr.split('-').map(Number);
+    const selectedDate = new Date(year, month - 1, day);
+    
+    const isToday = selectedDate.getDate() === today.getDate() &&
+                    selectedDate.getMonth() === today.getMonth() &&
+                    selectedDate.getFullYear() === today.getFullYear();
+    
+    if (isToday) {
+        const currentHour = today.getHours();
+        if (currentHour >= 16) {
+            return []; 
+        }
+    }
+
     const allPeriods = [Periodo.MANHA, Periodo.TARDE, Periodo.NOITE];
     return allPeriods.filter(p => {
+        if (isToday) {
+            const currentHour = today.getHours();
+            if (p === Periodo.MANHA && currentHour >= 12) return false;
+        }
         const techs = getAvailableTechnicians(cidade, dataStr, p);
         return techs.length > 0;
     });

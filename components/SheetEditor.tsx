@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { getSheetData, saveSheetData, confirmarPreAgendamento, removeAgendamento, addLog } from '../services/mockSheetService';
-import { DatabaseSchema, Tecnico, StatusExecucao, Agendamento, Periodo, UserProfile } from '../types';
-import { SaveIcon, TableIcon, CloudIcon, CodeIcon, AlertIcon, EditIcon } from './Icons';
+import { DatabaseSchema, Tecnico, StatusExecucao, Agendamento, Periodo, UserProfile, UsuarioPermissoes } from '../types';
+import { SaveIcon, TableIcon, CloudIcon, CodeIcon, AlertIcon, EditIcon, SearchIcon } from './Icons';
 
 interface SheetEditorProps {
   onCloudConfig: () => void;
@@ -51,6 +51,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   const [activeTab, setActiveTab] = useState<'tecnicos' | 'agendamentos' | 'atividades' | 'cidades' | 'usuarios' | 'feriados' | 'logs'>('tecnicos');
   const [newCityInput, setNewCityInput] = useState<{techIndex: number, value: string} | null>(null);
   const [editingAgendamentoId, setEditingAgendamentoId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // API Token State
   const [showApiModal, setShowApiModal] = useState(false);
@@ -64,6 +65,10 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
     window.addEventListener('localDataChanged', handleDataUpdate);
     return () => window.removeEventListener('localDataChanged', handleDataUpdate);
   }, []);
+
+  useEffect(() => {
+      setSearchTerm('');
+  }, [activeTab]);
 
   // Auto-Save Effect
   useEffect(() => {
@@ -159,14 +164,12 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
 
   const handleUsuarioNameChange = (index: number, value: string) => {
       if (!data) return;
-      // Imutabilidade correta: cria novo array e novo objeto para o item alterado
       const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, nome: value } : u);
       setData({ ...data, usuarios: newUsers });
   };
 
   const handleUsuarioPassChange = (index: number, value: string) => {
       if (!data) return;
-      // Imutabilidade correta
       const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, senha: value } : u);
       setData({ ...data, usuarios: newUsers });
   };
@@ -174,18 +177,32 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   const handleUsuarioProfileChange = (index: number, value: UserProfile) => {
       if (!data) return;
       
-      // 1. Atualizar Estado Local
-      const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, perfil: value } : u);
+      const newPerms: UsuarioPermissoes = value === 'admin' 
+        ? { agendamento: true, dashboard: true, planilha: true }
+        : { agendamento: true, dashboard: true, planilha: false };
+
+      const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, perfil: value, permissoes: newPerms } : u);
       const newData = { ...data, usuarios: newUsers };
-      setData(newData);
-
-      // 2. Salvar Imediatamente no LocalStorage (CRÍTICO)
-      // Isso evita que o addLog (que lê do storage) pegue a versão antiga e sobrescreva a alteração.
+      
+      // Force save first
       saveSheetData(newData);
-
-      // 3. Registrar Log (que agora vai ler os dados atualizados)
-      addLog(currentUser.nome, 'Alterar Perfil', `Usuário: ${newUsers[index].nome} para ${value}`);
+      setData(newData);
+      
+      // Then log
+      addLog(currentUser.nome, 'Alterar Perfil', `Usuário: ${newUsers[index].nome} para ${value} (Permissões resetadas)`);
   }
+
+  const handleUsuarioPermissaoChange = (index: number, perm: keyof UsuarioPermissoes, checked: boolean) => {
+      if (!data) return;
+      const user = data.usuarios[index];
+      const newPerms = { ...user.permissoes, [perm]: checked };
+      
+      const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, permissoes: newPerms } : u);
+      const newData = { ...data, usuarios: newUsers };
+      
+      setData(newData);
+      saveSheetData(newData);
+  };
 
   const handleDeleteUsuario = (index: number) => {
       if(!data) return;
@@ -195,16 +212,22 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       
       const newData = {...data, usuarios: newUsers};
       
-      // Atualiza estado e salva imediatamente antes do log
-      setData(newData);
+      // Force save first
       saveSheetData(newData);
+      setData(newData);
       
+      // Then log
       addLog(currentUser.nome, 'Excluir Usuário', `Usuário: ${deletedUser}`);
   }
 
   const handleAddUsuario = () => {
       if(!data) return;
-      const newUsers = [...(data.usuarios || []), { nome: "Novo Usuário", senha: "123", perfil: 'user' as UserProfile }];
+      const newUsers = [...(data.usuarios || []), { 
+          nome: "Novo Usuário", 
+          senha: "123", 
+          perfil: 'user' as UserProfile,
+          permissoes: { agendamento: true, dashboard: true, planilha: false }
+      }];
       setData({...data, usuarios: newUsers});
   }
 
@@ -237,7 +260,6 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       if (!data) return;
       const newAgendamentos = [...data.agendamentos];
       
-      // Se estiver alterando o ID do técnico, precisamos atualizar o nome do técnico também
       if (field === 'tecnicoId') {
           const tech = data.tecnicos.find(t => t.id === value);
           newAgendamentos[index].tecnicoId = value;
@@ -246,8 +268,6 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
           (newAgendamentos[index] as any)[field] = value;
       }
 
-      // Lógica específica para status execucao:
-      // Se mudar para qualquer coisa diferente de "Não Finalizado", limpa o motivo
       if (field === 'statusExecucao' && value !== 'Não Finalizado') {
           newAgendamentos[index].motivoNaoConclusao = '';
       }
@@ -268,7 +288,6 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       const agendamento = data.agendamentos[index];
       if (confirm('Tem certeza que deseja excluir este agendamento?')) {
           removeAgendamento(agendamento.id);
-          // Update local state directly to reflect change immediately if listener doesn't fire fast enough
           const newAgendamentos = data.agendamentos.filter((_, i) => i !== index);
           setData({...data, agendamentos: newAgendamentos});
           addLog(currentUser.nome, 'Excluir Agendamento', `ID: ${agendamento.id}, Cliente: ${agendamento.cliente}`);
@@ -308,7 +327,13 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   const handleGenerateToken = () => {
       if (!data) return;
       const newToken = 'sk_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-      setData({ ...data, apiToken: newToken });
+      const newData = { ...data, apiToken: newToken };
+      
+      // Force save first
+      saveSheetData(newData);
+      setData(newData);
+      
+      // Then log
       addLog(currentUser.nome, 'Gerar Token', 'Gerou novo token de API');
   }
 
@@ -322,10 +347,52 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
   }`;
 
+  // --- Lógica de Filtro ---
+  const lowerSearch = searchTerm.toLowerCase();
+
+  const filteredTecnicos = data.tecnicos.map((t, i) => ({ ...t, originalIndex: i })).filter(t => 
+      !searchTerm || 
+      t.nome.toLowerCase().includes(lowerSearch) || 
+      t.cidades.some(c => c.toLowerCase().includes(lowerSearch))
+  );
+
+  const filteredAgendamentos = data.agendamentos.map((a, i) => ({ ...a, originalIndex: i })).reverse().filter(a =>
+      !searchTerm ||
+      a.cliente.toLowerCase().includes(lowerSearch) ||
+      a.tecnicoNome.toLowerCase().includes(lowerSearch) ||
+      a.cidade.toLowerCase().includes(lowerSearch) ||
+      a.data.includes(searchTerm) ||
+      a.statusExecucao.toLowerCase().includes(lowerSearch)
+  );
+
+  const filteredUsuarios = data.usuarios.map((u, i) => ({ ...u, originalIndex: i })).filter(u =>
+      !searchTerm ||
+      u.nome.toLowerCase().includes(lowerSearch) ||
+      u.perfil.toLowerCase().includes(lowerSearch)
+  );
+
+  const filteredCidades = data.cidades.map((c, i) => ({ value: c, originalIndex: i })).filter(c =>
+      !searchTerm || c.value.toLowerCase().includes(lowerSearch)
+  );
+
+  const filteredAtividades = data.atividades.map((a, i) => ({ value: a, originalIndex: i })).filter(a =>
+      !searchTerm || a.value.toLowerCase().includes(lowerSearch)
+  );
+  
+  const filteredFeriados = data.feriados.map((f, i) => ({ value: f, originalIndex: i })).filter(f =>
+      !searchTerm || f.value.includes(searchTerm)
+  );
+
+  const filteredLogs = (data.logs || []).filter(l => 
+      !searchTerm || 
+      l.usuario.toLowerCase().includes(lowerSearch) || 
+      l.acao.toLowerCase().includes(lowerSearch) ||
+      l.detalhes.toLowerCase().includes(lowerSearch)
+  );
+
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden flex flex-col h-[calc(100vh-180px)] sm:h-[650px]">
+    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden flex flex-col h-[calc(100vh-180px)] sm:h-[calc(100vh-150px)]">
       
-      {/* API Configuration Modal */}
       {showApiModal && (
           <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl animate-fade-in-up max-h-[90vh] overflow-y-auto">
@@ -374,7 +441,6 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
           </div>
       )}
 
-      {/* Toolbar Responsiva */}
       <div className="bg-slate-50 border-b border-slate-200 p-3 sm:p-4 flex justify-between items-center">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="bg-white p-1.5 sm:p-2 rounded-lg border border-slate-200 shadow-sm"><TableIcon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" /></div>
@@ -421,6 +487,30 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
         <button onClick={() => setActiveTab('logs')} className={tabClass('logs')}>Histórico</button>
       </div>
 
+      {/* FILTER BAR */}
+      <div className="bg-white px-2 sm:px-6 py-3 border-b border-slate-100">
+        <div className="relative">
+            <input 
+                type="text" 
+                placeholder={`Filtrar ${activeTab}...`} 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+            />
+            <div className="absolute left-3 top-2.5 text-slate-400">
+                <SearchIcon className="w-5 h-5" />
+            </div>
+            {searchTerm && (
+                <button 
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                    &times;
+                </button>
+            )}
+        </div>
+      </div>
+
       <div className="flex-1 overflow-auto bg-white p-2 sm:p-6">
         
         {activeTab === 'tecnicos' && (
@@ -434,19 +524,21 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
             <div className="overflow-x-auto pb-4">
             <table className="w-full border-collapse text-sm min-w-[800px]">
               <thead>
-                <tr className="bg-slate-50 text-left border-b border-slate-100">
-                  <th className="p-4 font-bold text-slate-600 rounded-tl-xl">Nome</th>
-                  <th className="p-4 font-bold text-slate-600 min-w-[200px]">Área de Atuação</th>
-                  <th className="p-4 font-bold text-slate-600 text-center w-24 bg-indigo-50/50">Vagas Manhã</th>
-                  <th className="p-4 font-bold text-slate-600 text-center w-24 bg-indigo-50/50">Vagas Tarde</th>
-                  <th className="p-4 font-bold text-slate-600 text-center w-24 bg-indigo-50/50">Vagas 18h</th>
-                  <th className="p-4 font-bold text-slate-600 text-center w-24 bg-amber-50/50">Vagas Sáb</th>
-                  <th className="p-4 font-bold text-slate-600 text-center w-24 bg-rose-50/50">Vagas Dom</th>
-                  <th className="p-4 font-bold text-slate-600 text-center w-24 rounded-tr-xl bg-purple-50/50">Vagas Feriado</th>
+                <tr className="bg-slate-50 text-left border-b border-slate-100 shadow-sm">
+                  <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 rounded-tl-xl shadow-sm">Nome</th>
+                  <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 min-w-[200px] shadow-sm">Área de Atuação</th>
+                  <th className="sticky top-0 z-20 bg-indigo-50/50 p-4 font-bold text-slate-600 text-center w-24 shadow-sm">Vagas Manhã</th>
+                  <th className="sticky top-0 z-20 bg-indigo-50/50 p-4 font-bold text-slate-600 text-center w-24 shadow-sm">Vagas Tarde</th>
+                  <th className="sticky top-0 z-20 bg-indigo-50/50 p-4 font-bold text-slate-600 text-center w-24 shadow-sm">Vagas 18h</th>
+                  <th className="sticky top-0 z-20 bg-amber-50/50 p-4 font-bold text-slate-600 text-center w-24 shadow-sm">Vagas Sáb</th>
+                  <th className="sticky top-0 z-20 bg-rose-50/50 p-4 font-bold text-slate-600 text-center w-24 shadow-sm">Vagas Dom</th>
+                  <th className="sticky top-0 z-20 bg-purple-50/50 p-4 font-bold text-slate-600 text-center w-24 rounded-tr-xl shadow-sm">Vagas Feriado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.tecnicos.map((tech, idx) => (
+                {filteredTecnicos.map((tech) => {
+                  const idx = tech.originalIndex;
+                  return (
                   <tr key={tech.id} className="hover:bg-white hover:shadow-md hover:scale-[1.01] transition-all duration-200 group relative z-0 hover:z-10 border-b border-transparent hover:border-slate-100 rounded-lg">
                     <td className="p-3">
                       <input 
@@ -491,7 +583,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                     <td className="p-1 bg-rose-50/30 group-hover:bg-rose-50/50 transition-colors"><input type="number" step="1" min="0" className="w-full p-2 text-center outline-none bg-transparent font-bold text-rose-700" value={tech.capacidadeDomingo || 0} onChange={(e) => handleTechChange(idx, 'capacidadeDomingo', e.target.value)} /></td>
                     <td className="p-1 bg-purple-50/30 group-hover:bg-purple-50/50 transition-colors"><input type="number" step="1" min="0" className="w-full p-2 text-center outline-none bg-transparent font-bold text-purple-700" value={tech.capacidadeFeriado || 0} onChange={(e) => handleTechChange(idx, 'capacidadeFeriado', e.target.value)} /></td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
             </div>
@@ -499,25 +591,26 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
           </div>
         )}
 
-        {/* Generic Lists */}
         {['cidades', 'atividades', 'feriados'].includes(activeTab) && (
             <div className="space-y-4">
                  <table className="w-full border-collapse text-sm max-w-lg">
                     <thead>
-                        <tr className="bg-slate-50 text-left border-b border-slate-100">
-                            <th className="p-3 font-bold text-slate-600 rounded-tl-lg">
+                        <tr className="bg-slate-50 text-left border-b border-slate-100 shadow-sm">
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 rounded-tl-lg shadow-sm">
                                 {activeTab === 'feriados' ? 'Data (YYYY-MM-DD)' : 'Nome / Valor'}
                             </th>
-                            <th className="p-3 w-10 rounded-tr-lg"></th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 w-10 rounded-tr-lg shadow-sm"></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {(activeTab === 'cidades' ? data.cidades : activeTab === 'atividades' ? data.atividades : data.feriados).map((item, idx) => (
+                        {(activeTab === 'cidades' ? filteredCidades : activeTab === 'atividades' ? filteredAtividades : filteredFeriados).map((item, _) => {
+                            const idx = item.originalIndex;
+                            return (
                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                 <td className="p-2">
                                     <input 
                                         className="w-full p-2 rounded-lg border-transparent hover:border-slate-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none bg-transparent transition-all text-slate-700"
-                                        value={item}
+                                        value={item.value}
                                         type={activeTab === 'feriados' ? 'date' : 'text'}
                                         onChange={(e) => {
                                             if (activeTab === 'cidades') handleGlobalCityChange(idx, e.target.value);
@@ -539,7 +632,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                                     </button>
                                 </td>
                             </tr>
-                        ))}
+                        )})}
                     </tbody>
                 </table>
                 <button 
@@ -558,52 +651,100 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
         {activeTab === 'usuarios' && (
              <div className="space-y-4">
                  <div className="bg-indigo-50 text-indigo-800 text-xs p-3 rounded-lg border border-indigo-100 mb-4 inline-block">
-                     ⚠️ Usuários definidos aqui terão acesso ao sistema. O perfil <strong>Admin</strong> tem acesso total.
+                     ⚠️ Selecione <strong>Admin</strong> para acesso total ou personalize as permissões individualmente. A conta <strong>Administrador</strong> principal é protegida.
                  </div>
-                 <table className="w-full border-collapse text-sm max-w-2xl">
+                 <table className="w-full border-collapse text-sm max-w-4xl">
                     <thead>
-                        <tr className="bg-slate-50 text-left border-b border-slate-100">
-                            <th className="p-3 font-bold text-slate-600 rounded-tl-lg">Nome de Usuário</th>
-                            <th className="p-3 font-bold text-slate-600">Senha</th>
-                            <th className="p-3 font-bold text-slate-600">Perfil</th>
-                            <th className="p-3 w-10 rounded-tr-lg"></th>
+                        <tr className="bg-slate-50 text-left border-b border-slate-100 shadow-sm">
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 rounded-tl-lg w-1/4 shadow-sm">Usuário</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 w-1/4 shadow-sm">Senha</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 w-1/6 shadow-sm">Atalho Perfil</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 text-center w-1/3 shadow-sm">Permissões de Acesso</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 w-10 rounded-tr-lg shadow-sm"></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {data.usuarios.map((user, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                <td className="p-2">
-                                    <input 
-                                        className="w-full p-2 rounded-lg border-transparent hover:border-slate-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none bg-transparent transition-all text-slate-700 font-medium"
-                                        value={user.nome}
-                                        onChange={(e) => handleUsuarioNameChange(idx, e.target.value)}
-                                        placeholder="Ex: Gerente"
-                                    />
-                                </td>
-                                <td className="p-2">
-                                    <input 
-                                        className="w-full p-2 rounded-lg border-transparent hover:border-slate-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none bg-transparent transition-all text-slate-500 font-mono text-xs"
-                                        value={user.senha}
-                                        onChange={(e) => handleUsuarioPassChange(idx, e.target.value)}
-                                        placeholder="Senha"
-                                        type="text"
-                                    />
-                                </td>
-                                <td className="p-2">
-                                     <select
-                                        className={`w-full p-2 rounded-lg text-xs font-bold border outline-none ${user.perfil === 'admin' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-slate-50 text-slate-600 border-slate-100'}`}
-                                        value={user.perfil}
-                                        onChange={(e) => handleUsuarioProfileChange(idx, e.target.value as UserProfile)}
-                                     >
-                                         <option value="user">User</option>
-                                         <option value="admin">Admin</option>
-                                     </select>
-                                </td>
-                                <td className="p-2 text-center">
-                                    <button onClick={() => handleDeleteUsuario(idx)} className="text-slate-300 hover:text-rose-500 transition-colors">&times;</button>
-                                </td>
-                            </tr>
-                        ))}
+                        {filteredUsuarios.map((user) => {
+                            const idx = user.originalIndex;
+                            const isRootAdmin = user.nome === 'Administrador';
+                            return (
+                                <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                    <td className="p-2">
+                                        <input 
+                                            className={`w-full p-2 rounded-lg border-transparent outline-none bg-transparent transition-all font-medium ${isRootAdmin ? 'text-slate-500 cursor-not-allowed bg-slate-50' : 'hover:border-slate-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 text-slate-700'}`}
+                                            value={user.nome}
+                                            onChange={(e) => handleUsuarioNameChange(idx, e.target.value)}
+                                            placeholder="Ex: Gerente"
+                                            disabled={isRootAdmin}
+                                        />
+                                    </td>
+                                    <td className="p-2">
+                                        <input 
+                                            className={`w-full p-2 rounded-lg border-transparent outline-none bg-transparent transition-all font-mono text-xs ${isRootAdmin ? 'text-slate-400 cursor-not-allowed bg-slate-50' : 'hover:border-slate-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 text-slate-500'}`}
+                                            value={isRootAdmin ? '••••••••' : user.senha}
+                                            onChange={(e) => handleUsuarioPassChange(idx, e.target.value)}
+                                            placeholder="Senha"
+                                            type={isRootAdmin ? "password" : "text"}
+                                            disabled={isRootAdmin}
+                                        />
+                                    </td>
+                                    <td className="p-2">
+                                        <select
+                                            className={`w-full p-2 rounded-lg text-xs font-bold border outline-none ${
+                                                isRootAdmin ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' :
+                                                user.perfil === 'admin' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 
+                                                'bg-slate-50 text-slate-600 border-slate-100'
+                                            }`}
+                                            value={user.perfil}
+                                            onChange={(e) => handleUsuarioProfileChange(idx, e.target.value as UserProfile)}
+                                            disabled={isRootAdmin}
+                                        >
+                                            <option value="user">User</option>
+                                            <option value="admin">Admin</option>
+                                        </select>
+                                    </td>
+                                    <td className="p-2">
+                                        <div className={`flex items-center justify-center gap-4 ${isRootAdmin ? 'opacity-50 pointer-events-none' : ''}`}>
+                                            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                                    checked={user.permissoes?.agendamento ?? true}
+                                                    onChange={(e) => handleUsuarioPermissaoChange(idx, 'agendamento', e.target.checked)}
+                                                    disabled={isRootAdmin}
+                                                />
+                                                <span className="text-xs text-slate-700 font-medium">Agenda</span>
+                                            </label>
+                                            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                                    checked={user.permissoes?.dashboard ?? true}
+                                                    onChange={(e) => handleUsuarioPermissaoChange(idx, 'dashboard', e.target.checked)}
+                                                    disabled={isRootAdmin}
+                                                />
+                                                <span className="text-xs text-slate-700 font-medium">Dash</span>
+                                            </label>
+                                            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                                    checked={user.permissoes?.planilha ?? false}
+                                                    onChange={(e) => handleUsuarioPermissaoChange(idx, 'planilha', e.target.checked)}
+                                                    disabled={isRootAdmin}
+                                                />
+                                                <span className="text-xs text-slate-700 font-medium">Planilha</span>
+                                            </label>
+                                        </div>
+                                    </td>
+                                    <td className="p-2 text-center">
+                                        {!isRootAdmin && (
+                                            <button onClick={() => handleDeleteUsuario(idx)} className="text-slate-300 hover:text-rose-500 transition-colors">&times;</button>
+                                        )}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
                 <button onClick={handleAddUsuario} className="text-indigo-600 hover:text-indigo-800 font-bold text-xs bg-indigo-50 px-3 py-2 rounded-lg transition-colors shadow-sm">+ Novo Usuário</button>
@@ -615,15 +756,15 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                  <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-sm">
                         <thead>
-                            <tr className="bg-slate-50 text-left border-b border-slate-100">
-                                <th className="p-3 font-bold text-slate-600 rounded-tl-lg">Data/Hora</th>
-                                <th className="p-3 font-bold text-slate-600">Usuário</th>
-                                <th className="p-3 font-bold text-slate-600">Ação</th>
-                                <th className="p-3 font-bold text-slate-600 rounded-tr-lg">Detalhes</th>
+                            <tr className="bg-slate-50 text-left border-b border-slate-100 shadow-sm">
+                                <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 rounded-tl-lg shadow-sm">Data/Hora</th>
+                                <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Usuário</th>
+                                <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Ação</th>
+                                <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 rounded-tr-lg shadow-sm">Detalhes</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {(data.logs || []).map((log) => (
+                            {filteredLogs.map((log) => (
                                 <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="p-3 text-slate-500 text-xs font-mono whitespace-nowrap">
                                         {new Date(log.timestamp).toLocaleString()}
@@ -639,9 +780,9 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                                     </td>
                                 </tr>
                             ))}
-                            {(data.logs || []).length === 0 && (
+                            {filteredLogs.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="p-8 text-center text-slate-400 italic">Nenhum registro de atividade encontrado.</td>
+                                    <td colSpan={4} className="p-8 text-center text-slate-400 italic">Nenhum registro encontrado para este filtro.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -655,27 +796,28 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                  <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wide px-2 py-1">Filtros:</span>
                      <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">Todos ({data.agendamentos.length})</span>
+                     {searchTerm && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-200">Filtrado ({filteredAgendamentos.length})</span>}
                  </div>
                  <div className="overflow-x-auto pb-10">
                  <table className="w-full border-collapse text-sm whitespace-nowrap">
                     <thead>
-                        <tr className="bg-slate-50 text-left border-b border-slate-100">
-                            <th className="p-3 font-bold text-slate-600 rounded-tl-lg w-12">Editar</th>
-                            <th className="p-3 font-bold text-slate-600">Data</th>
-                            <th className="p-3 font-bold text-slate-600">Cliente</th>
-                            <th className="p-3 font-bold text-slate-600">Cidade</th>
-                            <th className="p-3 font-bold text-slate-600">Técnico</th>
-                            <th className="p-3 font-bold text-slate-600">Período</th>
-                            <th className="p-3 font-bold text-slate-600">Tipo</th>
-                            <th className="p-3 font-bold text-slate-600">Criado Por</th>
-                            <th className="p-3 font-bold text-slate-600">Status Execução</th>
-                            <th className="p-3 font-bold text-slate-600 rounded-tr-lg">Motivo (se falha)</th>
-                            <th className="p-3"></th>
+                        <tr className="bg-slate-50 text-left border-b border-slate-100 shadow-sm">
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 rounded-tl-lg w-12 shadow-sm">Editar</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Data</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Cliente</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Cidade</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Técnico</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Período</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Tipo</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Criado Por</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Status Execução</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 rounded-tr-lg shadow-sm">Motivo (se falha)</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 shadow-sm"></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {[...data.agendamentos].reverse().map((ag, reversedIdx) => {
-                             const realIdx = data.agendamentos.length - 1 - reversedIdx;
+                        {filteredAgendamentos.map((ag) => {
+                             const realIdx = ag.originalIndex;
                              const isEditing = editingAgendamentoId === ag.id;
 
                              return (
