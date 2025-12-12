@@ -123,7 +123,8 @@ const INITIAL_DATA: DatabaseSchema = {
         statusExecucao: 'Concluído',
         nomeUsuario: 'Administrador',
         tipo: 'PADRAO',
-        criadoEm: new Date().toISOString()
+        criadoEm: new Date().toISOString(),
+        observacao: 'Cliente pediu para ligar 30min antes.'
     },
     {
         id: 'mock-2',
@@ -140,7 +141,8 @@ const INITIAL_DATA: DatabaseSchema = {
         motivoNaoConclusao: 'Equipamento em falta',
         nomeUsuario: 'Atendente 1',
         tipo: 'PADRAO',
-        criadoEm: new Date().toISOString()
+        criadoEm: new Date().toISOString(),
+        observacao: ''
     }
   ],
   logs: [],
@@ -196,7 +198,8 @@ export const getSheetData = (): DatabaseSchema => {
         parsed.agendamentos = parsed.agendamentos.map((ag: any) => ({
             ...ag,
             tipo: ag.tipo || 'PADRAO',
-            criadoEm: ag.criadoEm || new Date().toISOString()
+            criadoEm: ag.criadoEm || new Date().toISOString(),
+            observacao: ag.observacao || ''
         }));
 
         return parsed;
@@ -233,10 +236,11 @@ export const setFullData = (data: DatabaseSchema) => {
 export const addAgendamento = (agendamento: Agendamento) => {
   const data = getSheetData();
   
-  // Garante que o motivoNaoConclusao seja inicializado como string vazia se estiver indefinido
+  // Garante inicialização correta
   const sanitizedAgendamento = {
       ...agendamento,
-      motivoNaoConclusao: agendamento.motivoNaoConclusao || ''
+      motivoNaoConclusao: agendamento.motivoNaoConclusao || '',
+      observacao: agendamento.observacao || ''
   };
 
   data.agendamentos.push(sanitizedAgendamento);

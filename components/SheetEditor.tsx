@@ -282,6 +282,10 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   const handleMotivoChange = (index: number, value: string) => {
       handleAgendamentoChange(index, 'motivoNaoConclusao', value);
   };
+
+  const handleObservacaoChange = (index: number, value: string) => {
+    handleAgendamentoChange(index, 'observacao', value);
+  };
   
   const handleDeleteAgendamento = (index: number) => {
       if (!data) return;
@@ -362,7 +366,8 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       a.tecnicoNome.toLowerCase().includes(lowerSearch) ||
       a.cidade.toLowerCase().includes(lowerSearch) ||
       a.data.includes(searchTerm) ||
-      a.statusExecucao.toLowerCase().includes(lowerSearch)
+      a.statusExecucao.toLowerCase().includes(lowerSearch) ||
+      (a.observacao || '').toLowerCase().includes(lowerSearch)
   );
 
   const filteredUsuarios = data.usuarios.map((u, i) => ({ ...u, originalIndex: i })).filter(u =>
@@ -808,6 +813,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                             <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Cidade</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Técnico</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Período</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Observações</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Tipo</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Criado Por</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Status Execução</th>
@@ -911,6 +917,21 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                                             <option value={Periodo.NOITE}>Especial (18h)</option>
                                         </select>
                                     ) : ag.periodo.split('(')[0]}
+                                </td>
+
+                                <td className="p-3">
+                                    {isEditing ? (
+                                        <input
+                                            className="bg-white border border-slate-300 rounded px-2 py-1 w-full text-xs"
+                                            value={ag.observacao || ''}
+                                            onChange={(e) => handleObservacaoChange(realIdx, e.target.value)}
+                                            placeholder="Obs..."
+                                        />
+                                    ) : (
+                                        <span className="text-xs text-slate-500 italic max-w-[150px] block truncate" title={ag.observacao}>
+                                            {ag.observacao || '-'}
+                                        </span>
+                                    )}
                                 </td>
                                 
                                 <td className="p-3">

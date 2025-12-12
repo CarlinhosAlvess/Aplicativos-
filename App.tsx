@@ -11,17 +11,21 @@ import { UserProfile, UsuarioPermissoes } from './types';
 // --- BRANDING COMPONENT ---
 const BrayoLogo = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <defs>
-      <linearGradient id="brayo_gradient" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#4F46E5" /> {/* Indigo 600 */}
-        <stop offset="1" stopColor="#0F172A" /> {/* Slate 900 */}
-      </linearGradient>
-    </defs>
-    <rect width="100" height="100" rx="28" fill="url(#brayo_gradient)" />
-    {/* Stylized 'B' / Lightning shape */}
-    <path d="M35 28H58C68 28 72 32 72 40C72 47 67 50 60 50H45L40 75H30L35 28Z" fill="white" fillOpacity="0.9" />
-    <path d="M72 40C72 44 70 50 60 50M60 50L65 50C75 50 80 55 80 65C80 75 72 80 60 80H42" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.3" />
-    <circle cx="75" cy="25" r="6" fill="#F59E0B" /> {/* Amber Dot for 'Alert/Speed' */}
+    {/* Circle Base */}
+    <circle cx="50" cy="50" r="48" fill="#4F46E5" />
+    
+    {/* Main Text */}
+    <text x="50" y="52" textAnchor="middle" fill="white" fontSize="26" fontWeight="900" fontFamily="sans-serif" letterSpacing="-1">Brayo</text>
+    
+    {/* Orange Line Detail */}
+    <path d="M25 62 L75 62" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
+    
+    {/* Subtitle */}
+    <text x="50" y="76" textAnchor="middle" fill="white" fontSize="9" fontWeight="bold" fontFamily="sans-serif" letterSpacing="1">INTERNET</text>
+    
+    {/* Speed/Signal decorative lines */}
+    <path d="M72 32 Q80 28 85 20" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" opacity="0.9" />
+    <path d="M78 36 Q84 34 88 28" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
   </svg>
 );
 
@@ -458,7 +462,7 @@ function App() {
             
             {/* Logo Section */}
             <div className="flex items-center gap-3 shrink-0">
-              <BrayoLogo className="w-8 h-8 sm:w-10 sm:h-10 shadow-sm rounded-lg" />
+              <BrayoLogo className="w-10 h-10 sm:w-12 sm:h-12 shadow-sm rounded-full" />
               <div className="flex flex-col justify-center">
                 <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 leading-none">
                   Brayo

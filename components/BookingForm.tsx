@@ -23,6 +23,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
   const [data, setData] = useState('');
   const [periodo, setPeriodo] = useState<Periodo>(Periodo.MANHA);
   const [tecnicoId, setTecnicoId] = useState('');
+  const [observacao, setObservacao] = useState('');
   const [tipoAgendamento, setTipoAgendamento] = useState<'PADRAO' | 'PRE_AGENDAMENTO'>('PADRAO');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -148,7 +149,8 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
       motivoNaoConclusao: '',
       nomeUsuario: currentUser.nome,
       tipo: tipoAgendamento,
-      criadoEm: new Date().toISOString()
+      criadoEm: new Date().toISOString(),
+      observacao: observacao
     };
 
     setTimeout(async () => {
@@ -167,6 +169,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
       setTelefone('');
       setTecnicoId('');
       setAtividade('');
+      setObservacao('');
       setTipoAgendamento('PADRAO'); // Reset
     }, 800);
   };
@@ -383,6 +386,17 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
                         {cidade && data && availablePeriods.includes(periodo) ? 'Nenhum técnico com vagas disponíveis.' : 'Selecione cidade, data e período para ver técnicos.'}
                     </div>
                 )}
+            </div>
+
+            {/* Campo de Observação */}
+            <div>
+              <label className={labelClass}>Observações para o Técnico (Opcional)</label>
+              <textarea
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="Ex: Ligar antes de ir, cliente só está em casa após as 14h, pode adiantar se houver vaga..."
+                className={`${inputClass} min-h-[80px] resize-none`}
+              />
             </div>
 
             <div className="pt-2">

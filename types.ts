@@ -46,6 +46,9 @@ export interface Agendamento {
 
   statusExecucao: StatusExecucao;
   motivoNaoConclusao?: string;
+  
+  // Novo campo de observação livre (instruções para o técnico)
+  observacao?: string;
 
   // Novos campos para Pré-Agendamento
   tipo: 'PADRAO' | 'PRE_AGENDAMENTO';
