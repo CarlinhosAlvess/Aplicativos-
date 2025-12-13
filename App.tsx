@@ -151,6 +151,8 @@ function App() {
   const [loginError, setLoginError] = useState('');
 
   const [view, setView] = useState<'form' | 'sheet' | 'dashboard'>('form');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
   const [showCloudModal, setShowCloudModal] = useState(false);
   const [cloudUrl, setCloudUrl] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -172,6 +174,20 @@ function App() {
           }
       }
   }, []);
+
+  const handleViewChange = (newView: 'form' | 'sheet' | 'dashboard') => {
+      if (view === newView) return;
+      setIsTransitioning(true);
+      
+      // Delay the actual view switch to allow the fade-out to happen
+      setTimeout(() => {
+          setView(newView);
+          // Wait a tiny bit before fading in to ensure React has rendered the new component
+          setTimeout(() => {
+              setIsTransitioning(false);
+          }, 50);
+      }, 300); // 300ms matches the duration-300 in the className
+  };
 
   const handleLogin = (e: React.FormEvent) => {
       e.preventDefault();
@@ -207,11 +223,15 @@ function App() {
       if (currentUser) {
           addLog(currentUser.nome, 'Logout', 'Usuário saiu do sistema');
       }
-      setCurrentUser(null);
-      setLoginUser('');
-      setLoginPass('');
-      sessionStorage.removeItem('app_global_session');
-      setView('form');
+      setIsTransitioning(true);
+      setTimeout(() => {
+          setCurrentUser(null);
+          setLoginUser('');
+          setLoginPass('');
+          sessionStorage.removeItem('app_global_session');
+          setView('form');
+          setIsTransitioning(false);
+      }, 300);
   }
 
   const handleSync = async (url: string, forceUpload: boolean = false) => {
@@ -481,7 +501,7 @@ function App() {
               </div>
 
               <button
-                onClick={() => perms.agendamento && setView('form')}
+                onClick={() => perms.agendamento && handleViewChange('form')}
                 disabled={!perms.agendamento}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                   !perms.agendamento ? 'opacity-30 cursor-not-allowed hidden' : 
@@ -495,7 +515,7 @@ function App() {
               </button>
 
               <button
-                onClick={() => perms.dashboard && setView('dashboard')}
+                onClick={() => perms.dashboard && handleViewChange('dashboard')}
                 disabled={!perms.dashboard}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                   !perms.dashboard ? 'opacity-30 cursor-not-allowed hidden' :
@@ -509,7 +529,7 @@ function App() {
               </button>
 
               <button
-                onClick={() => perms.planilha && setView('sheet')}
+                onClick={() => perms.planilha && handleViewChange('sheet')}
                 disabled={!perms.planilha}
                 className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                     !perms.planilha 
@@ -538,40 +558,42 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
-        {view === 'form' && perms.agendamento && (
-          <div className="animate-fade-in-up">
-            <div className="text-center mb-6 sm:mb-8">
-              <h1 className="text-xl sm:text-4xl font-extrabold text-slate-800 tracking-tight">
-                Novo Agendamento
-              </h1>
-              <p className="text-slate-500 text-sm mt-2">Preencha os dados abaixo para reservar uma visita técnica.</p>
-            </div>
-            <BookingForm currentUser={currentUser} />
-          </div>
-        )}
-
-        {view === 'sheet' && perms.planilha && (
-          <div className="animate-fade-in-up h-[calc(100vh-140px)] sm:h-auto">
-            <div className="mb-4 sm:mb-8 flex items-center justify-between">
-                <div>
-                    <h1 className="text-xl sm:text-3xl font-bold text-slate-800 tracking-tight">Base de Dados</h1>
-                    <p className="text-slate-500 mt-1 text-xs sm:text-base hidden sm:block">Gerenciamento centralizado de técnicos e recursos.</p>
+        <div className={`transition-all duration-300 ease-in-out transform ${isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
+            {view === 'form' && perms.agendamento && (
+            <div>
+                <div className="text-center mb-6 sm:mb-8">
+                <h1 className="text-xl sm:text-4xl font-extrabold text-slate-800 tracking-tight">
+                    Novo Agendamento
+                </h1>
+                <p className="text-slate-500 text-sm mt-2">Preencha os dados abaixo para reservar uma visita técnica.</p>
                 </div>
+                <BookingForm currentUser={currentUser} />
             </div>
-            <SheetEditor 
-                onCloudConfig={() => setShowCloudModal(true)} 
-                isCloudConfigured={!!cloudUrl}
-                isSyncing={isSyncing}
-                currentUser={currentUser}
-            />
-          </div>
-        )}
+            )}
 
-        {view === 'dashboard' && perms.dashboard && (
-           <div className="animate-fade-in-up">
-              <Dashboard />
-           </div>
-        )}
+            {view === 'sheet' && perms.planilha && (
+            <div className="h-[calc(100vh-140px)] sm:h-auto">
+                <div className="mb-4 sm:mb-8 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-xl sm:text-3xl font-bold text-slate-800 tracking-tight">Base de Dados</h1>
+                        <p className="text-slate-500 mt-1 text-xs sm:text-base hidden sm:block">Gerenciamento centralizado de técnicos e recursos.</p>
+                    </div>
+                </div>
+                <SheetEditor 
+                    onCloudConfig={() => setShowCloudModal(true)} 
+                    isCloudConfigured={!!cloudUrl}
+                    isSyncing={isSyncing}
+                    currentUser={currentUser}
+                />
+            </div>
+            )}
+
+            {view === 'dashboard' && perms.dashboard && (
+            <div>
+                <Dashboard />
+            </div>
+            )}
+        </div>
       </main>
     </div>
   );

@@ -29,6 +29,14 @@ export interface Tecnico {
   capacidadeFeriado: number;
 }
 
+// Estrutura específica para o problema relatado (Técnico no poste)
+export interface DadosIncidente {
+    vistoNoPoste: boolean;
+    horarioAvistado: string;
+    descricaoTecnico: string; // Ex: Carro branco, escada amarela...
+    endereco: string; // Novo: Endereço exato da ocorrência
+}
+
 export interface Agendamento {
   id: string;
   cliente: string;
@@ -50,9 +58,15 @@ export interface Agendamento {
   // Novo campo de observação livre (instruções para o técnico)
   observacao?: string;
 
-  // Novos campos para Pré-Agendamento
-  tipo: 'PADRAO' | 'PRE_AGENDAMENTO';
+  // Novos campos para Pré-Agendamento e Incidente
+  tipo: 'PADRAO' | 'PRE_AGENDAMENTO' | 'INCIDENTE';
   criadoEm: string; // ISO Timestamp da criação
+  
+  // Dados opcionais para quando for do tipo INCIDENTE
+  dadosIncidente?: DadosIncidente;
+
+  // Campo de prioridade do atendimento
+  prioridade?: 'Baixa' | 'Média' | 'Alta' | 'Urgente';
 }
 
 export interface Usuario {

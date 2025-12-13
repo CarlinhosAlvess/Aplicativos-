@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { getSheetData, saveSheetData, confirmarPreAgendamento, removeAgendamento, addLog } from '../services/mockSheetService';
-import { DatabaseSchema, Tecnico, StatusExecucao, Agendamento, Periodo, UserProfile, UsuarioPermissoes } from '../types';
-import { SaveIcon, TableIcon, CloudIcon, CodeIcon, AlertIcon, EditIcon, SearchIcon } from './Icons';
+import { getSheetData, saveSheetData, confirmarPreAgendamento, removeAgendamento, addLog, getAvailableTechnicians, getAvailablePeriods } from '../services/mockSheetService';
+import { DatabaseSchema, Tecnico, StatusExecucao, Agendamento, Periodo, UserProfile, UsuarioPermissoes, TecnicoDisponivel } from '../types';
+import { SaveIcon, TableIcon, CloudIcon, CodeIcon, AlertIcon, EditIcon, SearchIcon, RefreshCwIcon, CalendarIcon, LockIcon } from './Icons';
 
 interface SheetEditorProps {
   onCloudConfig: () => void;
@@ -53,6 +53,28 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   const [editingAgendamentoId, setEditingAgendamentoId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Filtros Avançados
+  const [filterDate, setFilterDate] = useState('');
+  const [filterPeriod, setFilterPeriod] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterTech, setFilterTech] = useState('');
+  const [filterCity, setFilterCity] = useState(''); // Novo filtro de Cidade
+
+  // Estados para Reagendamento (Reschedule)
+  const [rescheduleData, setRescheduleData] = useState<{
+      id: string;
+      currentDate: string;
+      currentPeriod: string;
+      currentCity: string;
+      newDate: string;
+      newPeriod: Periodo;
+      newTechId: string;
+      clientName: string;
+      reason: string; // Novo campo obrigatório
+  } | null>(null);
+  const [availableTechsForReschedule, setAvailableTechsForReschedule] = useState<TecnicoDisponivel[]>([]);
+
+
   // API Token State
   const [showApiModal, setShowApiModal] = useState(false);
 
@@ -68,7 +90,30 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
 
   useEffect(() => {
       setSearchTerm('');
+      // Limpa filtros ao trocar de aba para evitar confusão
+      setFilterDate('');
+      setFilterPeriod('');
+      setFilterStatus('');
+      setFilterTech('');
+      setFilterCity('');
   }, [activeTab]);
+
+  // Effect para calcular técnicos disponíveis durante o reagendamento
+  useEffect(() => {
+      if (rescheduleData && rescheduleData.newDate && rescheduleData.newPeriod) {
+          const techs = getAvailableTechnicians(rescheduleData.currentCity, rescheduleData.newDate, rescheduleData.newPeriod);
+          setAvailableTechsForReschedule(techs);
+          
+          // Se o técnico selecionado não estiver mais disponível (ex: troca de data), reseta
+          const isSelectedTechAvailable = techs.some(t => t.id === rescheduleData.newTechId);
+          if (!isSelectedTechAvailable && techs.length > 0) {
+              setRescheduleData(prev => prev ? ({ ...prev, newTechId: '' }) : null);
+          }
+      } else {
+          setAvailableTechsForReschedule([]);
+      }
+  }, [rescheduleData?.newDate, rescheduleData?.newPeriod]);
+
 
   // Auto-Save Effect
   useEffect(() => {
@@ -325,8 +370,60 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       if (confirm('Confirmar este pré-agendamento manualmente?')) {
           confirmarPreAgendamento(id);
           addLog(currentUser.nome, 'Confirmar Manual', `Confirmou pré-agendamento ID: ${id}`);
+          // CRITICAL FIX: Force UI update immediately
+          setData(getSheetData()); 
       }
   }
+
+  // --- RESCHEDULE LOGIC ---
+  const openRescheduleModal = (agendamento: Agendamento) => {
+      setRescheduleData({
+          id: agendamento.id,
+          currentDate: agendamento.data,
+          currentPeriod: agendamento.periodo,
+          currentCity: agendamento.cidade,
+          clientName: agendamento.cliente,
+          newDate: agendamento.data, // Default to current
+          newPeriod: agendamento.periodo, // Default to current
+          newTechId: '',
+          reason: ''
+      });
+  };
+
+  const handleConfirmReschedule = () => {
+      // Validação aprimorada: Exige técnico E motivo
+      if (!data || !rescheduleData || !rescheduleData.newTechId || !rescheduleData.reason.trim()) return;
+
+      const tech = data.tecnicos.find(t => t.id === rescheduleData.newTechId);
+      const techName = tech ? tech.nome : 'Desconhecido';
+
+      const newAgendamentos = data.agendamentos.map(a => {
+          if (a.id === rescheduleData.id) {
+              // Adiciona o motivo ao histórico de observações do agendamento
+              const currentObs = a.observacao ? a.observacao + '\n' : '';
+              const historyLog = `[Reagendado em ${new Date().toLocaleDateString()}: ${rescheduleData.reason}]`;
+              
+              return {
+                  ...a,
+                  data: rescheduleData.newDate,
+                  periodo: rescheduleData.newPeriod,
+                  tecnicoId: rescheduleData.newTechId,
+                  tecnicoNome: techName,
+                  statusExecucao: 'Pendente', // Reset status if moved
+                  motivoNaoConclusao: '',
+                  observacao: currentObs + historyLog
+              } as Agendamento; 
+          }
+          return a;
+      });
+
+      const newData = { ...data, agendamentos: newAgendamentos };
+      setData(newData);
+      saveSheetData(newData);
+      addLog(currentUser.nome, 'Reagendamento', `ID: ${rescheduleData.id} - Motivo: ${rescheduleData.reason} - De: ${rescheduleData.currentDate} para ${rescheduleData.newDate}`);
+      
+      setRescheduleData(null); // Close modal
+  };
 
   const handleGenerateToken = () => {
       if (!data) return;
@@ -360,15 +457,26 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       t.cidades.some(c => c.toLowerCase().includes(lowerSearch))
   );
 
-  const filteredAgendamentos = data.agendamentos.map((a, i) => ({ ...a, originalIndex: i })).reverse().filter(a =>
-      !searchTerm ||
-      a.cliente.toLowerCase().includes(lowerSearch) ||
-      a.tecnicoNome.toLowerCase().includes(lowerSearch) ||
-      a.cidade.toLowerCase().includes(lowerSearch) ||
-      a.data.includes(searchTerm) ||
-      a.statusExecucao.toLowerCase().includes(lowerSearch) ||
-      (a.observacao || '').toLowerCase().includes(lowerSearch)
-  );
+  const filteredAgendamentos = data.agendamentos.map((a, i) => ({ ...a, originalIndex: i })).reverse().filter(a => {
+      // Filtro de Texto Livre
+      const matchesSearch = !searchTerm ||
+          a.cliente.toLowerCase().includes(lowerSearch) ||
+          a.tecnicoNome.toLowerCase().includes(lowerSearch) ||
+          a.cidade.toLowerCase().includes(lowerSearch) ||
+          a.data.includes(searchTerm) ||
+          a.statusExecucao.toLowerCase().includes(lowerSearch) ||
+          (a.observacao || '').toLowerCase().includes(lowerSearch) ||
+          (a.atividade || '').toLowerCase().includes(lowerSearch); // Inclui atividade
+
+      // Filtros Específicos
+      const matchesDate = !filterDate || a.data === filterDate;
+      const matchesPeriod = !filterPeriod || a.periodo === filterPeriod;
+      const matchesStatus = !filterStatus || a.statusExecucao === filterStatus;
+      const matchesTech = !filterTech || a.tecnicoId === filterTech;
+      const matchesCity = !filterCity || a.cidade === filterCity;
+
+      return matchesSearch && matchesDate && matchesPeriod && matchesStatus && matchesTech && matchesCity;
+  });
 
   const filteredUsuarios = data.usuarios.map((u, i) => ({ ...u, originalIndex: i })).filter(u =>
       !searchTerm ||
@@ -398,6 +506,124 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   return (
     <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden flex flex-col h-[calc(100vh-180px)] sm:h-[calc(100vh-150px)]">
       
+      {/* --- RESCHEDULE MODAL --- */}
+      {rescheduleData && (
+          <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg animate-fade-in-up">
+                  <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                          <div className="bg-amber-100 p-2 rounded-full text-amber-600">
+                              <RefreshCwIcon className="w-5 h-5" />
+                          </div>
+                          <div>
+                              <h3 className="text-lg font-bold text-slate-800">Reagendar Visita</h3>
+                              <p className="text-sm text-slate-500">Cliente: <strong>{rescheduleData.clientName}</strong></p>
+                          </div>
+                      </div>
+                      <button onClick={() => setRescheduleData(null)} className="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+                  </div>
+
+                  <div className="space-y-4">
+                      {/* Current Info (Read-onlyish) */}
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs text-slate-500 flex justify-between">
+                          <div>
+                              <span className="block font-bold uppercase tracking-wider mb-1">De:</span>
+                              {rescheduleData.currentDate.split('-').reverse().join('/')} - {rescheduleData.currentPeriod}
+                          </div>
+                          <div className="text-right">
+                              <span className="block font-bold uppercase tracking-wider mb-1">Cidade:</span>
+                              {rescheduleData.currentCity}
+                          </div>
+                      </div>
+
+                      {/* New Date & Period */}
+                      <div className="grid grid-cols-2 gap-3">
+                          <div>
+                              <label className="block text-xs font-bold text-slate-600 mb-1">Nova Data</label>
+                              <div className="relative">
+                                  <input 
+                                      type="date"
+                                      className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                                      min={new Date().toISOString().split('T')[0]}
+                                      value={rescheduleData.newDate}
+                                      onChange={(e) => setRescheduleData({...rescheduleData, newDate: e.target.value})}
+                                  />
+                                  <div className="absolute right-3 top-2.5 pointer-events-none text-slate-400">
+                                      <CalendarIcon className="w-4 h-4" />
+                                  </div>
+                              </div>
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-slate-600 mb-1">Novo Período</label>
+                              <select 
+                                  className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                                  value={rescheduleData.newPeriod}
+                                  onChange={(e) => setRescheduleData({...rescheduleData, newPeriod: e.target.value as Periodo})}
+                              >
+                                  <option value={Periodo.MANHA}>Manhã</option>
+                                  <option value={Periodo.TARDE}>Tarde</option>
+                                  <option value={Periodo.NOITE}>Especial (18h)</option>
+                              </select>
+                          </div>
+                      </div>
+
+                      {/* Motivo do Reagendamento (Campo Obrigatório) */}
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">
+                              Motivo do Reagendamento <span className="text-rose-500">*</span>
+                          </label>
+                          <textarea 
+                              className="w-full p-3 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none resize-none h-20"
+                              placeholder="Ex: Cliente solicitou mudança de horário por imprevisto..."
+                              value={rescheduleData.reason}
+                              onChange={(e) => setRescheduleData({...rescheduleData, reason: e.target.value})}
+                          />
+                      </div>
+
+                      {/* Technician Selection */}
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-2">Técnicos Disponíveis</label>
+                          <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg bg-slate-50 p-2 space-y-2">
+                              {availableTechsForReschedule.length > 0 ? (
+                                  availableTechsForReschedule.map(tech => (
+                                      <label key={tech.id} className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${rescheduleData.newTechId === tech.id ? 'bg-amber-50 border-amber-500 ring-1 ring-amber-500' : 'bg-white border-slate-200 hover:bg-slate-100'}`}>
+                                          <div className="flex items-center gap-2">
+                                              <input 
+                                                  type="radio"
+                                                  name="rescheduleTech"
+                                                  value={tech.id}
+                                                  checked={rescheduleData.newTechId === tech.id}
+                                                  onChange={(e) => setRescheduleData({...rescheduleData, newTechId: e.target.value})}
+                                                  className="text-amber-600 focus:ring-amber-500"
+                                              />
+                                              <span className="text-sm font-medium text-slate-700">{tech.nome}</span>
+                                          </div>
+                                          <span className="text-xs font-bold text-amber-600">{tech.vagasRestantes} vagas</span>
+                                      </label>
+                                  ))
+                              ) : (
+                                  <div className="text-center py-4 text-slate-400 text-xs italic">
+                                      Nenhum técnico disponível nesta data/período.
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+
+                      <div className="flex justify-end gap-3 pt-2">
+                          <button onClick={() => setRescheduleData(null)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-lg text-sm">Cancelar</button>
+                          <button 
+                              onClick={handleConfirmReschedule}
+                              disabled={!rescheduleData.newTechId || !rescheduleData.reason.trim()}
+                              className={`px-4 py-2 bg-amber-600 text-white font-bold rounded-lg text-sm transition-all shadow-md ${(!rescheduleData.newTechId || !rescheduleData.reason.trim()) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-700 hover:shadow-lg'}`}
+                          >
+                              Confirmar Mudança
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {showApiModal && (
           <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl animate-fade-in-up max-h-[90vh] overflow-y-auto">
@@ -598,6 +824,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
 
         {['cidades', 'atividades', 'feriados'].includes(activeTab) && (
             <div className="space-y-4">
+                 <div className="overflow-x-auto">
                  <table className="w-full border-collapse text-sm max-w-lg">
                     <thead>
                         <tr className="bg-slate-50 text-left border-b border-slate-100 shadow-sm">
@@ -640,6 +867,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                         )})}
                     </tbody>
                 </table>
+                </div>
                 <button 
                     onClick={() => {
                         if (activeTab === 'cidades') handleAddGlobalCity();
@@ -658,6 +886,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                  <div className="bg-indigo-50 text-indigo-800 text-xs p-3 rounded-lg border border-indigo-100 mb-4 inline-block">
                      ⚠️ Selecione <strong>Admin</strong> para acesso total ou personalize as permissões individualmente. A conta <strong>Administrador</strong> principal é protegida.
                  </div>
+                 <div className="overflow-x-auto">
                  <table className="w-full border-collapse text-sm max-w-4xl">
                     <thead>
                         <tr className="bg-slate-50 text-left border-b border-slate-100 shadow-sm">
@@ -752,6 +981,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                         })}
                     </tbody>
                 </table>
+                </div>
                 <button onClick={handleAddUsuario} className="text-indigo-600 hover:text-indigo-800 font-bold text-xs bg-indigo-50 px-3 py-2 rounded-lg transition-colors shadow-sm">+ Novo Usuário</button>
             </div>
         )}
@@ -798,210 +1028,244 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
 
         {activeTab === 'agendamentos' && (
              <div className="space-y-4">
-                 <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wide px-2 py-1">Filtros:</span>
-                     <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">Todos ({data.agendamentos.length})</span>
-                     {searchTerm && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-200">Filtrado ({filteredAgendamentos.length})</span>}
+                 {/* Barra de Filtros Avançados */}
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 mb-1">Data Específica</label>
+                         <input 
+                             type="date"
+                             className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                             value={filterDate}
+                             onChange={(e) => setFilterDate(e.target.value)}
+                         />
+                     </div>
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 mb-1">Período</label>
+                         <select
+                             className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                             value={filterPeriod}
+                             onChange={(e) => setFilterPeriod(e.target.value)}
+                         >
+                             <option value="">Todos</option>
+                             <option value={Periodo.MANHA}>Manhã</option>
+                             <option value={Periodo.TARDE}>Tarde</option>
+                             <option value={Periodo.NOITE}>Especial</option>
+                         </select>
+                     </div>
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 mb-1">Cidade</label>
+                         <select
+                             className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                             value={filterCity}
+                             onChange={(e) => setFilterCity(e.target.value)}
+                         >
+                             <option value="">Todas</option>
+                             {(data.cidades || []).map(c => <option key={c} value={c}>{c}</option>)}
+                         </select>
+                     </div>
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 mb-1">Status Execução</label>
+                         <select
+                             className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                             value={filterStatus}
+                             onChange={(e) => setFilterStatus(e.target.value)}
+                         >
+                             <option value="">Todos</option>
+                             <option value="Pendente">Pendente</option>
+                             <option value="Em Andamento">Em Andamento</option>
+                             <option value="Concluído">Concluído</option>
+                             <option value="Não Finalizado">Não Finalizado</option>
+                         </select>
+                     </div>
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 mb-1">Técnico</label>
+                         <select
+                             className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                             value={filterTech}
+                             onChange={(e) => setFilterTech(e.target.value)}
+                         >
+                             <option value="">Todos</option>
+                             {data.tecnicos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                         </select>
+                     </div>
+                     <div className="flex items-end">
+                         <button 
+                             onClick={() => {
+                                 setFilterDate('');
+                                 setFilterPeriod('');
+                                 setFilterStatus('');
+                                 setFilterTech('');
+                                 setFilterCity('');
+                             }}
+                             className="w-full py-2 bg-white border border-slate-300 text-slate-500 hover:text-rose-600 hover:border-rose-300 rounded-lg text-xs font-bold transition-colors"
+                         >
+                             Limpar Filtros
+                         </button>
+                     </div>
                  </div>
+
+                 <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wide px-2 py-1">Filtros Ativos:</span>
+                     <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">Total ({filteredAgendamentos.length})</span>
+                     
+                     {/* Feedback Visual Aprimorado dos Filtros */}
+                     {filterDate && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-200">Data: {filterDate.split('-').reverse().join('/')}</span>}
+                     {filterPeriod && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-200">Período: {filterPeriod}</span>}
+                     {filterCity && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-200">Cidade: {filterCity}</span>}
+                     {filterStatus && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-200">Status: {filterStatus}</span>}
+                     {filterTech && (
+                        <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-200">
+                            Técnico: {data.tecnicos.find(t => t.id === filterTech)?.nome || 'Desconhecido'}
+                        </span>
+                     )}
+
+                     {searchTerm && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-200">Texto: "{searchTerm}"</span>}
+                 </div>
+
                  <div className="overflow-x-auto pb-10">
                  <table className="w-full border-collapse text-sm whitespace-nowrap">
                     <thead>
                         <tr className="bg-slate-50 text-left border-b border-slate-100 shadow-sm">
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 rounded-tl-lg w-12 shadow-sm">Editar</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Data</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Cliente</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Cidade</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Técnico</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Período</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Observações</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Tipo</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Criado Por</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 shadow-sm">Status Execução</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 font-bold text-slate-600 rounded-tr-lg shadow-sm">Motivo (se falha)</th>
-                            <th className="sticky top-0 z-20 bg-slate-50 p-3 shadow-sm"></th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 rounded-tl-lg w-24 shadow-sm">Ações</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Data</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Cliente</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Cidade</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Técnico</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Período</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Observações</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Status Execução</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {filteredAgendamentos.map((ag) => {
-                             const realIdx = ag.originalIndex;
-                             const isEditing = editingAgendamentoId === ag.id;
+                    {filteredAgendamentos.map((ag) => {
+                        const idx = ag.originalIndex;
+                        const isPre = ag.tipo === 'PRE_AGENDAMENTO';
+                        const isIncident = ag.tipo === 'INCIDENTE';
 
-                             return (
-                            <tr key={ag.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="p-3 text-center">
-                                    <button
-                                        onClick={() => {
-                                            if (isEditing) {
-                                                handleSave(); // Explicit save when finishing edit
-                                                setEditingAgendamentoId(null);
-                                                addLog(currentUser.nome, 'Editar Agendamento', `ID: ${ag.id}, Cliente: ${ag.cliente}`);
-                                            } else {
-                                                setEditingAgendamentoId(ag.id);
-                                            }
-                                        }}
-                                        className={`p-1.5 rounded-lg transition-colors ${isEditing ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-200 hover:text-indigo-600'}`}
-                                        title={isEditing ? 'Concluir Edição' : 'Editar Agendamento'}
+                        return (
+                        <tr key={ag.id} className={`hover:bg-slate-50 transition-colors ${isPre ? 'bg-amber-50/30' : ''} ${isIncident ? 'bg-rose-50/30' : ''}`}>
+                            <td className="p-2 text-center">
+                                <div className="flex justify-center gap-1">
+                                    <button 
+                                        onClick={() => openRescheduleModal(ag)}
+                                        className="text-amber-500 hover:text-amber-700 hover:bg-amber-50 p-1.5 rounded transition-colors"
+                                        title="Reagendar"
                                     >
-                                        {isEditing ? <SaveIcon className="w-4 h-4" /> : <EditIcon className="w-4 h-4" />}
+                                        <RefreshCwIcon className="w-4 h-4" />
                                     </button>
-                                </td>
-                                
-                                <td className="p-3 text-slate-600 font-mono text-xs">
-                                    {isEditing ? (
-                                        <input 
-                                            type="date" 
-                                            className="bg-white border border-slate-300 rounded px-2 py-1 w-full text-xs"
-                                            value={ag.data}
-                                            onChange={(e) => handleAgendamentoChange(realIdx, 'data', e.target.value)}
-                                        />
-                                    ) : ag.data}
-                                </td>
-                                
-                                <td className="p-3 font-medium text-slate-800">
-                                    {isEditing ? (
-                                        <div className="flex flex-col gap-1">
-                                            <input 
-                                                className="bg-white border border-slate-300 rounded px-2 py-1 w-full text-xs"
-                                                value={ag.cliente}
-                                                onChange={(e) => handleAgendamentoChange(realIdx, 'cliente', e.target.value)}
-                                                placeholder="Nome"
-                                            />
-                                            <input 
-                                                className="bg-white border border-slate-300 rounded px-2 py-1 w-full text-[10px]"
-                                                value={ag.telefone}
-                                                onChange={(e) => handleAgendamentoChange(realIdx, 'telefone', e.target.value)}
-                                                placeholder="Telefone"
-                                            />
+                                    <button onClick={() => handleDeleteAgendamento(idx)} className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded transition-colors" title="Excluir">
+                                        &times;
+                                    </button>
+                                </div>
+                            </td>
+                            <td className="p-2">
+                                <input 
+                                    type="date"
+                                    className="p-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-300 outline-none bg-transparent transition-all text-xs w-32"
+                                    value={ag.data}
+                                    onChange={(e) => handleAgendamentoChange(idx, 'data', e.target.value)}
+                                />
+                            </td>
+                            <td className="p-2">
+                                <div className="flex flex-col">
+                                    <input 
+                                        className="p-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-300 outline-none bg-transparent transition-all text-slate-800 font-medium w-40"
+                                        value={ag.cliente}
+                                        onChange={(e) => handleAgendamentoChange(idx, 'cliente', e.target.value)}
+                                    />
+                                    <span className="text-[10px] text-slate-400 px-1.5">{ag.telefone}</span>
+                                    {isPre && ag.criadoEm && (
+                                        <div className="px-1.5 mt-0.5">
+                                            <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded font-bold">Pré-Reserva: <CountdownTimer criadoEm={ag.criadoEm} /></span>
+                                            <button onClick={() => handleManualConfirm(ag.id)} className="text-[10px] underline text-indigo-600 ml-2">Confirmar</button>
                                         </div>
-                                    ) : (
-                                        <>
-                                            {ag.cliente}
-                                            <div className="text-[10px] text-slate-400">{ag.telefone}</div>
-                                        </>
                                     )}
-                                </td>
-                                
-                                <td className="p-3 text-slate-600">
-                                    {isEditing ? (
-                                        <select 
-                                            className="bg-white border border-slate-300 rounded px-2 py-1 w-full text-xs"
-                                            value={ag.cidade}
-                                            onChange={(e) => handleAgendamentoChange(realIdx, 'cidade', e.target.value)}
-                                        >
-                                            {data.cidades.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    ) : ag.cidade}
-                                </td>
-                                
-                                <td className="p-3 text-indigo-600 font-medium">
-                                    {isEditing ? (
-                                         <select 
-                                            className="bg-white border border-slate-300 rounded px-2 py-1 w-full text-xs"
-                                            value={ag.tecnicoId}
-                                            onChange={(e) => handleAgendamentoChange(realIdx, 'tecnicoId', e.target.value)}
-                                        >
-                                            {data.tecnicos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                                        </select>
-                                    ) : ag.tecnicoNome}
-                                </td>
-                                
-                                <td className="p-3 text-slate-500 text-xs">
-                                     {isEditing ? (
-                                         <select 
-                                            className="bg-white border border-slate-300 rounded px-2 py-1 w-full text-xs"
-                                            value={ag.periodo}
-                                            onChange={(e) => handleAgendamentoChange(realIdx, 'periodo', e.target.value)}
-                                        >
-                                            <option value={Periodo.MANHA}>Manhã</option>
-                                            <option value={Periodo.TARDE}>Tarde</option>
-                                            <option value={Periodo.NOITE}>Especial (18h)</option>
-                                        </select>
-                                    ) : ag.periodo.split('(')[0]}
-                                </td>
-
-                                <td className="p-3">
-                                    {isEditing ? (
-                                        <input
-                                            className="bg-white border border-slate-300 rounded px-2 py-1 w-full text-xs"
-                                            value={ag.observacao || ''}
-                                            onChange={(e) => handleObservacaoChange(realIdx, e.target.value)}
-                                            placeholder="Obs..."
-                                        />
-                                    ) : (
-                                        <span className="text-xs text-slate-500 italic max-w-[150px] block truncate" title={ag.observacao}>
-                                            {ag.observacao || '-'}
-                                        </span>
+                                     {isIncident && (
+                                        <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold w-fit mt-1">INCIDENTE</span>
                                     )}
-                                </td>
-                                
-                                <td className="p-3">
-                                    {ag.tipo === 'PRE_AGENDAMENTO' ? (
-                                        <div className="flex flex-col gap-1">
-                                            <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold border border-amber-200 w-fit">
-                                                PRÉ-AGENDA
-                                            </span>
-                                            {ag.criadoEm && <CountdownTimer criadoEm={ag.criadoEm} />}
-                                            <button 
-                                                onClick={() => handleManualConfirm(ag.id)}
-                                                className="text-[10px] text-indigo-600 hover:underline font-bold text-left"
-                                            >
-                                                Confirmar Manualmente
-                                            </button>
+                                </div>
+                            </td>
+                            <td className="p-2">
+                                <input 
+                                    className="p-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-300 outline-none bg-transparent transition-all text-slate-600 text-xs w-32"
+                                    value={ag.cidade}
+                                    onChange={(e) => handleAgendamentoChange(idx, 'cidade', e.target.value)}
+                                />
+                            </td>
+                            <td className="p-2">
+                                <select 
+                                    className="p-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-300 outline-none bg-transparent transition-all text-xs w-32 cursor-pointer"
+                                    value={ag.tecnicoId}
+                                    onChange={(e) => handleAgendamentoChange(idx, 'tecnicoId', e.target.value)}
+                                >
+                                    <option value="" disabled>Selecione...</option>
+                                    {data.tecnicos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                                    {isIncident && <option value="audit-log">Auditoria</option>}
+                                </select>
+                            </td>
+                            <td className="p-2">
+                                <select 
+                                    className="p-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-300 outline-none bg-transparent transition-all text-xs w-28 cursor-pointer"
+                                    value={ag.periodo}
+                                    onChange={(e) => handleAgendamentoChange(idx, 'periodo', e.target.value)}
+                                >
+                                    <option value={Periodo.MANHA}>Manhã</option>
+                                    <option value={Periodo.TARDE}>Tarde</option>
+                                    <option value={Periodo.NOITE}>Especial</option>
+                                </select>
+                            </td>
+                            <td className="p-2">
+                                <div className="space-y-1">
+                                    <textarea 
+                                        className="p-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-300 outline-none bg-transparent transition-all text-xs w-48 resize-none min-h-[40px]"
+                                        value={ag.observacao}
+                                        onChange={(e) => handleObservacaoChange(idx, e.target.value)}
+                                        placeholder="Observações..."
+                                    />
+                                    {isIncident && ag.dadosIncidente && (
+                                        <div className="bg-rose-50 p-2 rounded border border-rose-100 text-[10px] text-rose-800 leading-tight">
+                                            <strong>Relato:</strong> {ag.dadosIncidente.descricaoTecnico}<br/>
+                                            <strong>Visto:</strong> {ag.dadosIncidente.vistoNoPoste ? 'Sim' : 'Não'} às {ag.dadosIncidente.horarioAvistado}<br/>
+                                            <strong>Endereço:</strong> {ag.dadosIncidente.endereco}
                                         </div>
-                                    ) : (
-                                        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold">PADRÃO</span>
                                     )}
-                                </td>
-
-                                <td className="p-3 text-slate-500 text-xs font-medium">
-                                    <div className="flex items-center gap-1">
-                                        <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] border border-slate-200 uppercase">
-                                            {(ag.nomeUsuario || '?').charAt(0)}
-                                        </span>
-                                        {ag.nomeUsuario || 'Sistema'}
-                                    </div>
-                                </td>
-
-                                <td className="p-3">
+                                </div>
+                            </td>
+                            <td className="p-2">
+                                <div className="flex flex-col gap-1">
                                     <select 
-                                        className={`p-1.5 rounded-lg text-xs font-bold border outline-none ${
+                                        className={`p-1.5 rounded-lg border outline-none text-xs w-32 cursor-pointer font-bold ${
                                             ag.statusExecucao === 'Concluído' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                             ag.statusExecucao === 'Não Finalizado' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                                            ag.statusExecucao === 'Em Andamento' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                            ag.statusExecucao === 'Em Andamento' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
                                             'bg-slate-50 text-slate-600 border-slate-200'
                                         }`}
                                         value={ag.statusExecucao}
-                                        onChange={(e) => handleExecutionStatusChange(realIdx, e.target.value as StatusExecucao)}
+                                        onChange={(e) => handleExecutionStatusChange(idx, e.target.value as StatusExecucao)}
                                     >
                                         <option value="Pendente">Pendente</option>
                                         <option value="Em Andamento">Em Andamento</option>
                                         <option value="Concluído">Concluído</option>
                                         <option value="Não Finalizado">Não Finalizado</option>
                                     </select>
-                                </td>
-                                <td className="p-3">
-                                    {ag.statusExecucao === 'Não Finalizado' ? (
+                                    
+                                    {ag.statusExecucao === 'Não Finalizado' && (
                                         <input 
-                                            className="w-full p-2 bg-rose-50 border border-rose-200 rounded text-rose-800 text-xs placeholder-rose-300 outline-none focus:ring-1 focus:ring-rose-300 transition-colors"
-                                            placeholder="Motivo obrigatório..."
+                                            placeholder="Motivo da falha..."
+                                            className="p-1.5 rounded-lg border border-rose-200 text-rose-700 placeholder:text-rose-300 text-xs w-32 bg-rose-50 focus:ring-1 focus:ring-rose-400 outline-none"
                                             value={ag.motivoNaoConclusao || ''}
-                                            onChange={(e) => handleMotivoChange(realIdx, e.target.value)}
+                                            onChange={(e) => handleMotivoChange(idx, e.target.value)}
                                         />
-                                    ) : (
-                                        <span className="text-slate-300 text-xs">-</span>
                                     )}
-                                </td>
-                                <td className="p-3">
-                                    <button 
-                                        onClick={() => handleDeleteAgendamento(realIdx)}
-                                        className="text-slate-300 hover:text-rose-500 transition-colors p-1"
-                                        title="Excluir Agendamento"
-                                    >
-                                        <TableIcon className="w-4 h-4" /> 
-                                    </button>
-                                </td>
-                            </tr>
-                        )})}
+                                </div>
+                            </td>
+                        </tr>
+                    )})}
+                    {filteredAgendamentos.length === 0 && (
+                        <tr>
+                            <td colSpan={8} className="p-8 text-center text-slate-400 italic">Nenhum agendamento encontrado para este filtro.</td>
+                        </tr>
+                    )}
                     </tbody>
                 </table>
                 </div>
