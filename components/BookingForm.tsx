@@ -14,6 +14,10 @@ const BookingTimer = ({ criadoEm }: { criadoEm: string }) => {
     
     useEffect(() => {
         const update = () => {
+            if (!criadoEm) {
+                 setLabel('00:00');
+                 return;
+            }
             const now = Date.now();
             const created = new Date(criadoEm).getTime();
             const diff = now - created;
@@ -109,8 +113,10 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
     setAvailableActivities(getAtividades());
     fetchPendingBookings();
     const interval = setInterval(() => {
+        // Apenas atualiza se a lista local estiver vazia ou se o usuário não estiver interagindo ativamente
+        // para evitar "pulos" na UI, mas aqui mantemos simples para garantir sincronia
         fetchPendingBookings();
-    }, 2000);
+    }, 3000); // Aumentado para 3s para dar mais tempo de leitura
     return () => clearInterval(interval);
   }, [currentUser]);
 
@@ -253,27 +259,48 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
   const handleQuickConfirm = (e: React.MouseEvent, id: string, clientName: string) => {
       e.preventDefault();
       e.stopPropagation();
-      if (window.confirm(`Deseja efetivar a reserva de ${clientName}?`)) {
+
+      // UI Otimista: Remove da lista IMEDIATAMENTE para feedback visual rápido
+      setPendingBookings(prev => prev.filter(b => b.id !== id));
+      
+      // Pequeno delay para permitir que o React renderize a remoção visual antes de processar pesado
+      setTimeout(() => {
           const success = confirmarPreAgendamento(id);
+          
           if (success) {
             addLog(currentUser.nome, 'Confirmar Manual (Form)', `Confirmou pré-agendamento ID: ${id}`);
-            // Force immediate update of pending list locally for better UX
-            setPendingBookings(prev => prev.filter(p => p.id !== id));
-            alert('Reserva confirmada com sucesso!');
+            // Não precisa de alert, a ação já foi "sentida" pelo usuário.
+            // Opcional: Mostrar um toast pequeno ou apenas deixar.
+            fetchPendingBookings(); // Garante sincronia final
           } else {
-              alert('Erro ao confirmar. O agendamento pode não existir mais.');
-              fetchPendingBookings(); // Sync with real data
+              // Se falhou, recarrega a lista para mostrar o item de volta (ou mostrar que sumiu de verdade)
+              fetchPendingBookings();
+              
+              // Verifica se falhou porque já estava feito (idempotência)
+              const db = getSheetData();
+              const alreadyDone = db.agendamentos.find(a => a.id === id && a.tipo === 'PADRAO');
+              
+              if (!alreadyDone) {
+                 alert('Atenção: Não foi possível confirmar. O agendamento pode ter expirado.');
+              }
           }
-      }
+      }, 50);
   };
 
   const handleQuickCancel = (e: React.MouseEvent, id: string, clientName: string) => {
       e.preventDefault();
       e.stopPropagation();
-      if (window.confirm(`Deseja CANCELAR a reserva de ${clientName}? Esta ação libera a vaga imediatamente.`)) {
-          removeAgendamento(id);
-          addLog(currentUser.nome, 'Cancelar Pré (Form)', `Cancelou pré-agendamento ID: ${id}`);
-          setPendingBookings(prev => prev.filter(p => p.id !== id));
+      
+      // Confirmação simplificada apenas para destruição de dados
+      if (window.confirm(`Cancelar reserva de ${clientName}?`)) {
+          // UI Otimista
+          setPendingBookings(prev => prev.filter(b => b.id !== id));
+          
+          setTimeout(() => {
+            removeAgendamento(id);
+            addLog(currentUser.nome, 'Cancelar Pré (Form)', `Cancelou pré-agendamento ID: ${id}`);
+            fetchPendingBookings();
+          }, 50);
       }
   }
 
@@ -415,7 +442,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
   };
 
   return (
-    <div className={`bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden max-w-2xl mx-auto relative`}>
+    <div className={`bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden max-w-4xl mx-auto relative`}>
       <div className={`absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-${themeClass}-500 to-${themeClass === 'rose' ? 'red' : (themeClass === 'amber' ? 'orange' : 'violet')}-500 transition-colors duration-500`}></div>
 
       <div className="p-4 sm:p-10">
@@ -429,7 +456,8 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
                         </h3>
                         <span className="text-[10px] font-bold bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full">{pendingBookings.length}</span>
                     </div>
-                    <div className="divide-y divide-amber-100/50 max-h-48 overflow-y-auto">
+                    {/* AUMENTADO DE max-h-48 PARA max-h-96 */}
+                    <div className="divide-y divide-amber-100/50 max-h-96 overflow-y-auto">
                         {pendingBookings.map(pb => (
                             <div key={pb.id} className="p-3 flex items-center justify-between hover:bg-amber-100/30 transition-colors">
                                 <div>
@@ -445,18 +473,18 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
                                     <button 
                                         type="button" 
                                         onClick={(e) => handleQuickConfirm(e, pb.id, pb.cliente)}
-                                        className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                        className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors group"
                                         title="Confirmar Reserva"
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     </button>
                                     <button 
                                         type="button" 
                                         onClick={(e) => handleQuickCancel(e, pb.id, pb.cliente)}
-                                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 transition-colors"
+                                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 transition-colors group"
                                         title="Cancelar Reserva"
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                     </button>
                                 </div>
                             </div>
@@ -566,8 +594,9 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
                 </div>
                 {cityError && <p className="text-[10px] text-rose-500 font-bold mt-1 ml-1">{cityError}</p>}
                 
+                {/* AUMENTADO DE max-h-48 PARA max-h-96 */}
                 {showCityDropdown && filteredCities.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-96 overflow-y-auto">
                         {filteredCities.map(city => (
                             <div 
                                 key={city} 
@@ -740,7 +769,8 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
                         {totalVagasGeral > 0 && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{totalVagasGeral} vagas na região</span>}
                     </div>
                     
-                    <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {/* AUMENTADO DE max-h-48 PARA max-h-96 */}
+                    <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto pr-1">
                         {availableTechs.length > 0 ? (
                             availableTechs.map((tech) => (
                                 <label 

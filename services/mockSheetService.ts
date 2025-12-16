@@ -224,8 +224,12 @@ export const getSheetData = (): DatabaseSchema => {
 };
 
 export const saveSheetData = (data: DatabaseSchema) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  window.dispatchEvent(new Event('localDataChanged'));
+  try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      window.dispatchEvent(new Event('localDataChanged'));
+  } catch (e) {
+      console.error("Erro ao salvar no localStorage", e);
+  }
 };
 
 export const addLog = (usuario: string, acao: string, detalhes: string) => {
@@ -254,7 +258,8 @@ export const addAgendamento = (agendamento: Agendamento) => {
       ...agendamento,
       motivoNaoConclusao: agendamento.motivoNaoConclusao || '',
       observacao: agendamento.observacao || '',
-      dadosIncidente: agendamento.dadosIncidente || undefined
+      dadosIncidente: agendamento.dadosIncidente || undefined,
+      criadoEm: agendamento.criadoEm || new Date().toISOString()
   };
 
   data.agendamentos.push(sanitizedAgendamento);
@@ -267,6 +272,7 @@ export const removeAgendamento = (id: string) => {
     saveSheetData(data);
 };
 
+// Função melhorada para não deletar dados corrompidos acidentalmente
 export const expirePreBookings = (): Agendamento[] => {
     const data = getSheetData();
     const now = Date.now();
@@ -274,28 +280,39 @@ export const expirePreBookings = (): Agendamento[] => {
     const expired: Agendamento[] = [];
     const EXPIRATION_LIMIT = 30 * 60 * 1000; 
 
+    let needsSave = false;
+
     data.agendamentos.forEach(ag => {
         if (ag.tipo === 'PRE_AGENDAMENTO') {
             if (!ag.criadoEm) {
-                 expired.push(ag);
+                 // Recupera: Se não tem data, define como agora para dar uma chance
+                 ag.criadoEm = new Date().toISOString();
+                 active.push(ag);
+                 needsSave = true;
                  return;
             }
             const created = new Date(ag.criadoEm).getTime();
             if (isNaN(created)) {
-                expired.push(ag);
+                // Recupera: Se data inválida, redefine
+                ag.criadoEm = new Date().toISOString();
+                active.push(ag);
+                needsSave = true;
                 return;
             }
             if ((now - created) >= EXPIRATION_LIMIT) {
                 expired.push(ag);
+                needsSave = true;
                 return; 
             }
         }
         active.push(ag);
     });
 
-    if (expired.length > 0) {
+    if (needsSave) {
         data.agendamentos = active;
-        addLog('Sistema', 'Expiração Automática', `Removeu ${expired.length} pré-agendamentos expirados.`);
+        if (expired.length > 0) {
+             addLog('Sistema', 'Expiração Automática', `Removeu ${expired.length} pré-agendamentos expirados.`);
+        }
         saveSheetData(data);
     }
 
@@ -303,19 +320,32 @@ export const expirePreBookings = (): Agendamento[] => {
 };
 
 export const getActivePreBookings = (): Agendamento[] => {
-    expirePreBookings(); // Clean up expired ones first
+    // Chama a expiração primeiro para limpar a lista
+    expirePreBookings();
     const data = getSheetData();
+    // Retorna apenas os que sobreviveram
     return data.agendamentos.filter(a => a.tipo === 'PRE_AGENDAMENTO');
 };
 
 export const confirmarPreAgendamento = (id: string) => {
     const data = getSheetData();
     const index = data.agendamentos.findIndex(a => a.id === id);
+    
     if (index !== -1) {
+        // Encontrou! Confirma.
         data.agendamentos[index].tipo = 'PADRAO';
         saveSheetData(data);
         return true;
     }
+    
+    // Se não encontrou pelo ID, pode ser que o ID tenha mudado ou algo estranho ocorreu.
+    // Tenta uma verificação de segurança: Se já existe um agendamento 'PADRAO' com o mesmo ID (clique duplo?), retorna true.
+    const alreadyConfirmed = data.agendamentos.find(a => a.id === id && a.tipo === 'PADRAO');
+    if (alreadyConfirmed) {
+        return true;
+    }
+
+    console.warn(`Tentativa de confirmar agendamento falhou. ID ${id} não encontrado.`);
     return false;
 };
 

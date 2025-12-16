@@ -4,7 +4,7 @@ import BookingForm from './components/BookingForm';
 import SheetEditor from './components/SheetEditor';
 import Dashboard from './components/Dashboard';
 import { TableIcon, EditIcon, ChartIcon, AlertIcon, LockIcon } from './components/Icons';
-import { loadFromCloud, saveToCloud } from './services/cloudService';
+import { loadFromCloud, saveToCloud, isValidUrl } from './services/cloudService';
 import { getSheetData, setFullData, removeAgendamento, confirmarPreAgendamento, expirePreBookings, addLog, getUniqueCities } from './services/mockSheetService';
 import { UserProfile, UsuarioPermissoes } from './types';
 
@@ -30,10 +30,18 @@ const BrayoLogo = ({ className }: { className?: string }) => (
 );
 
 // Componente simples de Toast para notificação
-const Toast = ({ title, message, type, onAction, actionLabel, onClose }: { title: string, message: string, type: 'warning' | 'error', onAction?: () => void, actionLabel?: string, onClose: () => void }) => (
-    <div className={`fixed bottom-4 right-4 z-[100] max-w-sm w-[90%] mx-auto sm:w-full bg-white rounded-xl shadow-2xl border-l-4 p-4 animate-fade-in-up ${type === 'warning' ? 'border-amber-500' : 'border-rose-500'}`}>
+const Toast = ({ title, message, type, onAction, actionLabel, onClose }: { title: string, message: string, type: 'warning' | 'error' | 'success', onAction?: () => void, actionLabel?: string, onClose: () => void }) => (
+    <div className={`fixed bottom-4 right-4 z-[100] max-w-sm w-[90%] mx-auto sm:w-full bg-white rounded-xl shadow-2xl border-l-4 p-4 animate-fade-in-up ${
+        type === 'warning' ? 'border-amber-500' : 
+        type === 'success' ? 'border-emerald-500' : 
+        'border-rose-500'
+    }`}>
         <div className="flex gap-3">
-            <div className={`mt-0.5 ${type === 'warning' ? 'text-amber-500' : 'text-rose-500'}`}>
+            <div className={`mt-0.5 ${
+                type === 'warning' ? 'text-amber-500' : 
+                type === 'success' ? 'text-emerald-500' : 
+                'text-rose-500'
+            }`}>
                 <AlertIcon className="w-5 h-5" />
             </div>
             <div className="flex-1">
@@ -57,7 +65,7 @@ const Toast = ({ title, message, type, onAction, actionLabel, onClose }: { title
 );
 
 // Função para tocar sons aprimorados usando AudioContext
-const playNotificationSound = (type: 'warning' | 'error') => {
+const playNotificationSound = (type: 'warning' | 'error' | 'success') => {
     try {
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         if (!AudioContext) return;
@@ -68,7 +76,23 @@ const playNotificationSound = (type: 'warning' | 'error') => {
         // Volume master seguro
         masterGain.gain.setValueAtTime(0.15, ctx.currentTime);
 
-        if (type === 'warning') {
+        if (type === 'success') {
+             // Som de Sucesso (Acorde maior ascendente)
+             const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5
+             frequencies.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(masterGain);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (i * 0.1));
+                gain.gain.setValueAtTime(0, ctx.currentTime + (i * 0.1));
+                gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + (i * 0.1) + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (i * 0.1) + 0.4);
+                osc.start(ctx.currentTime + (i * 0.1));
+                osc.stop(ctx.currentTime + (i * 0.1) + 0.5);
+             });
+        } else if (type === 'warning') {
             // Som de "Carrilhão" / Atenção (Dois tons harmônicos)
             const osc1 = ctx.createOscillator();
             const gain1 = ctx.createGain();
@@ -161,7 +185,7 @@ function App() {
   const isSyncingRef = useRef(false);
 
   // Estados de notificação
-  const [notification, setNotification] = useState<{id: string, title: string, message: string, type: 'warning' | 'error', actionId?: string} | null>(null);
+  const [notification, setNotification] = useState<{id: string, title: string, message: string, type: 'warning' | 'error' | 'success', actionId?: string} | null>(null);
   const notifiedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -242,19 +266,48 @@ function App() {
       try {
         if (forceUpload) {
             const localData = getSheetData();
-            await saveToCloud(url, localData);
+            const success = await saveToCloud(url, localData);
+            if (success) {
+                setNotification({
+                    id: Date.now().toString(),
+                    title: "Sucesso",
+                    message: "Dados enviados para a nuvem Google.",
+                    type: 'success'
+                });
+                playNotificationSound('success');
+            } else {
+                throw new Error("Não foi possível enviar os dados (Erro de rede ou URL).");
+            }
         } else {
             const cloudData = await loadFromCloud(url);
             if (cloudData) {
                 setFullData(cloudData);
+                if (!localStorage.getItem('app_initial_load_complete')) {
+                     setNotification({
+                        id: Date.now().toString(),
+                        title: "Conectado",
+                        message: "Dados carregados da planilha com sucesso.",
+                        type: 'success'
+                    });
+                    localStorage.setItem('app_initial_load_complete', 'true');
+                }
             } else {
-                const localData = getSheetData();
-                await saveToCloud(url, localData);
+                // Se load retorna null (e não erro), significa que algo falhou silenciosamente ou está vazio? 
+                // Com o novo cloudService, ele joga erro, então cairá no catch.
             }
         }
         setLastSync(new Date().toLocaleTimeString());
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
+          // Show Toast Error
+          const msg = e.message || 'Erro desconhecido ao sincronizar.';
+          setNotification({
+              id: Date.now().toString(),
+              title: "Erro de Conexão",
+              message: msg,
+              type: 'error'
+          });
+          playNotificationSound('error');
       } finally {
           setIsSyncing(false);
           setTimeout(() => { isSyncingRef.current = false; }, 500);
@@ -345,7 +398,10 @@ function App() {
         checkPreBookings();
         const currentUrl = localStorage.getItem('app_cloud_url');
         if (currentUrl && !isSyncingRef.current) {
-            handleSync(currentUrl, false);
+            // Sincronização periódica silenciosa (não força upload, apenas baixa se necessário ou mantém vivo)
+            // handleSync(currentUrl, false); 
+            // Comentado para evitar "Failed to fetch" spam se a URL estiver errada.
+            // O usuário deve iniciar ou o save dispara.
         }
     }, 10000);
 
@@ -356,10 +412,17 @@ function App() {
   }, []); 
 
   const saveCloudConfig = () => {
-      localStorage.setItem('app_cloud_url', cloudUrl);
+      const cleanUrl = cloudUrl.trim();
+      
+      if (!isValidUrl(cleanUrl)) {
+          alert('URL Inválida! Certifique-se de que o link termina em "/exec" e pertence ao script.google.com');
+          return;
+      }
+
+      localStorage.setItem('app_cloud_url', cleanUrl);
       setShowCloudModal(false);
-      handleSync(cloudUrl, false);
-      alert('Configuração salva! Sincronização ativada.');
+      handleSync(cleanUrl, false);
+      // Feedback imediato via Toast será dado pelo handleSync
   };
 
   const handleConfirmPreBooking = () => {
@@ -464,9 +527,14 @@ function App() {
                     type="text" 
                     value={cloudUrl}
                     onChange={(e) => setCloudUrl(e.target.value)}
-                    placeholder="https://script.google.com/macros/s/..."
+                    placeholder="https://script.google.com/macros/s/.../exec"
                     className="w-full p-3 border border-slate-300 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
+                   {cloudUrl && !isValidUrl(cloudUrl) && (
+                      <div className="text-xs text-rose-600 bg-rose-50 p-2 rounded mb-4 border border-rose-100 font-bold">
+                          ⚠️ A URL deve terminar com "/exec" e pertencer ao script.google.com
+                      </div>
+                  )}
                   <div className="flex justify-end gap-3">
                       <button onClick={() => setShowCloudModal(false)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-lg">Cancelar</button>
                       <button onClick={saveCloudConfig} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700">Salvar e Conectar</button>
@@ -477,7 +545,7 @@ function App() {
 
       {/* Navbar Clean & Modern */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 sm:h-20 items-center">
             
             {/* Logo Section */}
@@ -557,7 +625,7 @@ function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+      <main className="w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         <div className={`transition-all duration-300 ease-in-out transform ${isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
             {view === 'form' && perms.agendamento && (
             <div>
