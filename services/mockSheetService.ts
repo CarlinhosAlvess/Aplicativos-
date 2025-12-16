@@ -1,7 +1,8 @@
 
 import { Agendamento, DatabaseSchema, Periodo, Tecnico, TecnicoDisponivel, Usuario, LogEntry } from '../types';
 
-const STORAGE_KEY = 'app_agendamento_sheet_data_v9'; 
+// ATUALIZADO PARA V10 PARA FORÇAR O RESET DOS DADOS E CORRIGIR LOGIN
+const STORAGE_KEY = 'app_agendamento_sheet_data_v10'; 
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
 
@@ -82,6 +83,12 @@ const INITIAL_DATA: DatabaseSchema = {
     { 
         nome: "Administrador", 
         senha: "1234", 
+        perfil: "admin",
+        permissoes: { agendamento: true, dashboard: true, planilha: true }
+    },
+    { 
+        nome: "admin", // Adicionado fallback simples
+        senha: "admin", 
         perfil: "admin",
         permissoes: { agendamento: true, dashboard: true, planilha: true }
     },

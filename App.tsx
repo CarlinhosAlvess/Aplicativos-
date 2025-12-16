@@ -492,7 +492,8 @@ function App() {
                       </button>
                   </form>
                   <p className="mt-8 text-[10px] text-slate-400 text-center">
-                      © 2025 Brayo Systems. Todos os direitos reservados.
+                      <span className="block mb-1">Padrão: <strong className="text-slate-500">Administrador / 1234</strong></span>
+                      <span className="block">ou <strong className="text-slate-500">admin / admin</strong></span>
                   </p>
                </div>
           </div>
