@@ -52,6 +52,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   const [newCityInput, setNewCityInput] = useState<{techIndex: number, value: string} | null>(null);
   const [editingAgendamentoId, setEditingAgendamentoId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Filtros Avançados
   const [filterDate, setFilterDate] = useState('');
@@ -115,6 +116,18 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   }, [rescheduleData?.newDate, rescheduleData?.newPeriod]);
 
 
+  // Helper de Validação
+  const isDataValid = (currentData: DatabaseSchema): boolean => {
+      const invalidCities = currentData.cidades.some(c => !c.trim());
+      const invalidActivities = currentData.atividades.some(a => !a.trim());
+      const invalidHolidays = currentData.feriados.some(f => !f.trim());
+      
+      // Validação de Agendamentos: Atividade não pode ser vazia
+      const invalidAgendamentos = currentData.agendamentos.some(a => !a.atividade || !a.atividade.trim());
+      
+      return !invalidCities && !invalidActivities && !invalidHolidays && !invalidAgendamentos;
+  };
+
   // Auto-Save Effect
   useEffect(() => {
       // Ignora a primeira renderização para não salvar dados recém carregados desnecessariamente
@@ -124,9 +137,15 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       }
 
       if (data) {
+          // Validação silenciosa para o Auto-Save: Se inválido, não salva automaticamente para evitar corrupção
+          if (!isDataValid(data)) {
+              return; 
+          }
+
           // Salva automaticamente após 2 segundos sem digitar
           const timer = setTimeout(() => {
               saveSheetData(data);
+              setSaveError(null); // Limpa erro se o auto-save ocorrer com sucesso (significa que usuário corrigiu)
           }, 2000); 
 
           return () => clearTimeout(timer);
@@ -229,7 +248,8 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       const newUsers = data.usuarios.map((u, i) => i === index ? { ...u, perfil: value, permissoes: newPerms } : u);
       const newData = { ...data, usuarios: newUsers };
       
-      // Force save first
+      // Force save first (skip validation for user change to allow fluid edits, or apply same validation)
+      // Here we assume user changes are safe enough, but ideally we validate everything.
       saveSheetData(newData);
       setData(newData);
       
@@ -303,19 +323,23 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
 
   const handleAgendamentoChange = (index: number, field: keyof Agendamento, value: any) => {
       if (!data) return;
-      const newAgendamentos = [...data.agendamentos];
+      
+      // CRITICAL FIX: Create a shallow copy of the specific item to ensure immutability.
+      // Modifying the object inside the array directly prevented React from detecting the change.
+      const currentItem = data.agendamentos[index];
+      const updatedItem = { ...currentItem, [field]: value };
       
       if (field === 'tecnicoId') {
           const tech = data.tecnicos.find(t => t.id === value);
-          newAgendamentos[index].tecnicoId = value;
-          newAgendamentos[index].tecnicoNome = tech ? tech.nome : 'Desconhecido';
-      } else {
-          (newAgendamentos[index] as any)[field] = value;
+          updatedItem.tecnicoNome = tech ? tech.nome : 'Desconhecido';
       }
 
       if (field === 'statusExecucao' && value !== 'Não Finalizado') {
-          newAgendamentos[index].motivoNaoConclusao = '';
+          updatedItem.motivoNaoConclusao = '';
       }
+
+      const newAgendamentos = [...data.agendamentos];
+      newAgendamentos[index] = updatedItem;
 
       setData({ ...data, agendamentos: newAgendamentos });
   }
@@ -345,7 +369,13 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
 
   const handleSave = () => {
     if (data) {
+      if (!isDataValid(data)) {
+          setSaveError('Não é possível salvar. Existem campos vazios em Cidades, Atividades, Feriados ou Atividade do Agendamento.');
+          return;
+      }
+
       saveSheetData(data);
+      setSaveError(null);
       addLog(currentUser.nome, 'Salvar Manual', 'Salvamento manual da planilha');
     }
   };
@@ -366,12 +396,30 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
       setData({...data, tecnicos: [...data.tecnicos, newTech]});
   }
 
-  const handleManualConfirm = (id: string) => {
-      if (confirm('Confirmar este pré-agendamento manualmente?')) {
-          confirmarPreAgendamento(id);
-          addLog(currentUser.nome, 'Confirmar Manual', `Confirmou pré-agendamento ID: ${id}`);
-          // CRITICAL FIX: Force UI update immediately
-          setData(getSheetData()); 
+  const handleManualConfirm = (e: React.MouseEvent, id: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (window.confirm('Confirmar este pré-agendamento manualmente?')) {
+          if (!data) return;
+          
+          // 1. Salva o estado atual (com possíveis edições de texto pendentes) para o localStorage
+          // Isso garante que não perdemos o que o usuário digitou em outros campos.
+          saveSheetData(data);
+
+          // 2. Chama a função de serviço que lê do LS, altera o status e salva no LS.
+          const success = confirmarPreAgendamento(id);
+          
+          if (success) {
+              // 3. Recarrega o estado completo do LS para a UI refletir a mudança.
+              // Isso resolve o conflito onde o AutoSave poderia sobrescrever a confirmação.
+              const freshData = getSheetData();
+              setData(freshData);
+              addLog(currentUser.nome, 'Confirmar Manual', `Confirmou pré-agendamento ID: ${id}`);
+          } else {
+              alert('Erro: Agendamento não encontrado ou já processado.');
+              setData(getSheetData()); // Sync anyway
+          }
       }
   }
 
@@ -506,6 +554,20 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
   return (
     <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden flex flex-col h-[calc(100vh-180px)] sm:h-[calc(100vh-150px)]">
       
+      {/* ERROR TOAST */}
+      {saveError && (
+          <div className="fixed top-20 right-4 z-[90] bg-white border-l-4 border-rose-500 rounded-xl shadow-2xl p-4 animate-fade-in-up max-w-sm">
+              <div className="flex gap-3">
+                  <div className="text-rose-500 mt-0.5"><AlertIcon className="w-5 h-5" /></div>
+                  <div>
+                      <h4 className="font-bold text-slate-800 text-sm">Erro ao Salvar</h4>
+                      <p className="text-xs text-slate-500 mt-1">{saveError}</p>
+                      <button onClick={() => setSaveError(null)} className="text-xs font-bold text-slate-400 hover:text-slate-600 mt-2">Dispensar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* --- RESCHEDULE MODAL --- */}
       {rescheduleData && (
           <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -837,11 +899,12 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                     <tbody className="divide-y divide-slate-100">
                         {(activeTab === 'cidades' ? filteredCidades : activeTab === 'atividades' ? filteredAtividades : filteredFeriados).map((item, _) => {
                             const idx = item.originalIndex;
+                            const isInvalid = !item.value.trim();
                             return (
                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                 <td className="p-2">
                                     <input 
-                                        className="w-full p-2 rounded-lg border-transparent hover:border-slate-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none bg-transparent transition-all text-slate-700"
+                                        className={`w-full p-2 rounded-lg border focus:ring-2 outline-none bg-transparent transition-all text-slate-700 ${isInvalid ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50' : 'border-transparent hover:border-slate-200 focus:border-indigo-300 focus:ring-indigo-100'}`}
                                         value={item.value}
                                         type={activeTab === 'feriados' ? 'date' : 'text'}
                                         onChange={(e) => {
@@ -849,6 +912,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                                             else if (activeTab === 'atividades') handleActivityChange(idx, e.target.value);
                                             else handleFeriadoChange(idx, e.target.value);
                                         }}
+                                        placeholder="Preencha este campo"
                                     />
                                 </td>
                                 <td className="p-2 text-center">
@@ -1130,6 +1194,7 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                             <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Data</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Cliente</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Cidade</th>
+                            <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Atividade</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Técnico</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Período</th>
                             <th className="sticky top-0 z-20 bg-slate-50 p-4 font-bold text-slate-600 shadow-sm">Observações</th>
@@ -1175,9 +1240,17 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                                     />
                                     <span className="text-[10px] text-slate-400 px-1.5">{ag.telefone}</span>
                                     {isPre && ag.criadoEm && (
-                                        <div className="px-1.5 mt-0.5">
-                                            <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded font-bold">Pré-Reserva: <CountdownTimer criadoEm={ag.criadoEm} /></span>
-                                            <button onClick={() => handleManualConfirm(ag.id)} className="text-[10px] underline text-indigo-600 ml-2">Confirmar</button>
+                                        <div className="px-1.5 mt-1 bg-white/50 rounded border border-amber-200 p-1 flex flex-col gap-1 items-start">
+                                            <span className="text-[9px] text-amber-700 font-bold flex items-center gap-1">
+                                                ⏳ <CountdownTimer criadoEm={ag.criadoEm} />
+                                            </span>
+                                            <button 
+                                                type="button" 
+                                                onClick={(e) => handleManualConfirm(e, ag.id)} 
+                                                className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold py-1 px-2 rounded border border-emerald-300 shadow-sm transition-all"
+                                            >
+                                                Confirmar Agora
+                                            </button>
                                         </div>
                                     )}
                                      {isIncident && (
@@ -1191,6 +1264,19 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                                     value={ag.cidade}
                                     onChange={(e) => handleAgendamentoChange(idx, 'cidade', e.target.value)}
                                 />
+                            </td>
+                            <td className="p-2">
+                                <select
+                                    className={`p-1.5 rounded-lg border outline-none bg-transparent transition-all text-xs w-32 cursor-pointer ${
+                                        !ag.atividade || !ag.atividade.trim() ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50' : 'border-transparent hover:border-slate-200 focus:border-indigo-300'
+                                    }`}
+                                    value={ag.atividade}
+                                    onChange={(e) => handleAgendamentoChange(idx, 'atividade', e.target.value)}
+                                >
+                                    <option value="" disabled>Selecione...</option>
+                                    {data.atividades.map(ativ => <option key={ativ} value={ativ}>{ativ}</option>)}
+                                    {!data.atividades.includes(ag.atividade) && ag.atividade && <option value={ag.atividade}>{ag.atividade}</option>}
+                                </select>
                             </td>
                             <td className="p-2">
                                 <select 
@@ -1217,8 +1303,8 @@ const SheetEditor = ({ onCloudConfig, isCloudConfigured, isSyncing, currentUser 
                             <td className="p-2">
                                 <div className="space-y-1">
                                     <textarea 
-                                        className="p-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-300 outline-none bg-transparent transition-all text-xs w-48 resize-none min-h-[40px]"
-                                        value={ag.observacao}
+                                        className="p-1.5 rounded-lg border border-transparent hover:border-slate-200 focus:border-indigo-300 outline-none bg-transparent transition-all text-xs w-48 resize-none min-h-[40px] text-slate-600"
+                                        value={ag.observacao || ''}
                                         onChange={(e) => handleObservacaoChange(idx, e.target.value)}
                                         placeholder="Observações..."
                                     />

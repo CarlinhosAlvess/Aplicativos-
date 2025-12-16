@@ -83,9 +83,14 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
   const dd = String(today.getDate()).padStart(2, '0');
   const minDate = `${yyyy}-${mm}-${dd}`;
 
-  // Helper de normalização para comparação insensível a acentos/case
+  // Helper de normalização aprimorado: remove acentos, lower case e espaços extras
   const normalizeText = (text: string) => {
-      return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      return text
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+        .replace(/\s+/g, ' ') // Remove espaços múltiplos internos
+        .trim();
   };
 
   // Função centralizada para buscar e filtrar pendências
@@ -248,12 +253,16 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
   const handleQuickConfirm = (e: React.MouseEvent, id: string, clientName: string) => {
       e.preventDefault();
       e.stopPropagation();
-      if (confirm(`Deseja efetivar a reserva de ${clientName}?`)) {
+      if (window.confirm(`Deseja efetivar a reserva de ${clientName}?`)) {
           const success = confirmarPreAgendamento(id);
           if (success) {
             addLog(currentUser.nome, 'Confirmar Manual (Form)', `Confirmou pré-agendamento ID: ${id}`);
+            // Force immediate update of pending list locally for better UX
             setPendingBookings(prev => prev.filter(p => p.id !== id));
             alert('Reserva confirmada com sucesso!');
+          } else {
+              alert('Erro ao confirmar. O agendamento pode não existir mais.');
+              fetchPendingBookings(); // Sync with real data
           }
       }
   };
@@ -261,7 +270,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
   const handleQuickCancel = (e: React.MouseEvent, id: string, clientName: string) => {
       e.preventDefault();
       e.stopPropagation();
-      if (confirm(`Deseja CANCELAR a reserva de ${clientName}? Esta ação libera a vaga imediatamente.`)) {
+      if (window.confirm(`Deseja CANCELAR a reserva de ${clientName}? Esta ação libera a vaga imediatamente.`)) {
           removeAgendamento(id);
           addLog(currentUser.nome, 'Cancelar Pré (Form)', `Cancelou pré-agendamento ID: ${id}`);
           setPendingBookings(prev => prev.filter(p => p.id !== id));
@@ -291,11 +300,16 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
     
     // Final Validation check before submit
     const normalizedInput = normalizeText(cidade);
-    const cityExists = cities.some(c => normalizeText(c) === normalizedInput);
-    if (!cityExists) {
+    // Busca a cidade oficial (canônica) baseada no input do usuário
+    const matchedCity = cities.find(c => normalizeText(c) === normalizedInput);
+    
+    if (!matchedCity) {
         setCityError('Selecione uma cidade válida.');
         return;
     }
+    
+    // Garante que o estado visual esteja correto (auto-correct se o user não deu blur)
+    if (cidade !== matchedCity) setCidade(matchedCity);
 
     if (tipoAgendamento !== 'INCIDENTE' && !tecnicoId) return;
     if (duplicityError || cityError) return;
@@ -325,7 +339,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
       id: crypto.randomUUID(),
       cliente: nome,
       telefone,
-      cidade, // Value is already normalized or correct from validation
+      cidade: matchedCity, // Usa o nome oficial (Capitalizado, acentuado) para salvar
       atividade: atividadeFinal,
       data,
       periodo,
@@ -337,7 +351,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
       nomeUsuario: currentUser.nome,
       tipo: tipoAgendamento,
       criadoEm: new Date().toISOString(),
-      observacao: observacao,
+      observacao: observacao.trim(), // Ensure observation is trimmed and present
       dadosIncidente: tipoAgendamento === 'INCIDENTE' ? {
           vistoNoPoste: incidenteVisivel,
           horarioAvistado: incidenteHora,
@@ -463,480 +477,340 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
             <p className="text-sm sm:text-base text-emerald-700/80 mb-8 whitespace-pre-line leading-relaxed max-w-sm">{successMessage}</p>
             <button 
               onClick={() => setSuccessMessage(null)}
-              className="bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 font-bold transform hover:-translate-y-0.5 w-full sm:w-auto"
+              className="bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 font-bold transform hover:-translate-y-1"
             >
-              Novo Atendimento
+              Novo Agendamento
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-            
-            <div className="bg-slate-50 p-1.5 rounded-xl border border-slate-100 flex gap-1 sm:gap-2">
+          <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in">
+            {/* TYPE SELECTOR TABS */}
+            <div className="flex bg-slate-100 p-1.5 rounded-xl mb-6">
                 <button
                     type="button"
                     onClick={() => setTipoAgendamento('PADRAO')}
-                    className={`flex-1 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                        tipoAgendamento === 'PADRAO' 
-                        ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-indigo-200' 
-                        : 'text-slate-500 hover:bg-white/50'
-                    }`}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${tipoAgendamento === 'PADRAO' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                    Agendar
+                    Padrão
                 </button>
                 <button
                     type="button"
                     onClick={() => setTipoAgendamento('PRE_AGENDAMENTO')}
-                    className={`flex-1 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                        tipoAgendamento === 'PRE_AGENDAMENTO' 
-                        ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' 
-                        : 'text-slate-500 hover:bg-white/50'
-                    }`}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${tipoAgendamento === 'PRE_AGENDAMENTO' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                    Pré-Agendar
+                    Pré-Agendamento
                 </button>
                 <button
                     type="button"
-                    onClick={() => {
-                        setTipoAgendamento('INCIDENTE');
-                        setAtividade('Verificação de Interferência');
-                    }}
-                    className={`flex-1 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 ${
-                        tipoAgendamento === 'INCIDENTE' 
-                        ? 'bg-white text-rose-600 shadow-sm ring-1 ring-rose-200' 
-                        : 'text-slate-500 hover:bg-white/50'
-                    }`}
+                    onClick={() => setTipoAgendamento('INCIDENTE')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${tipoAgendamento === 'INCIDENTE' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                    <AlertIcon className="w-3 h-3" />
-                    Reportar
+                    Reportar Incidente
                 </button>
             </div>
 
-            {tipoAgendamento === 'PRE_AGENDAMENTO' && (
-                <div className="bg-amber-50 text-amber-800 text-xs p-3 rounded-lg border border-amber-100 flex gap-2 items-center animate-fade-in">
-                    <span className="text-lg">⏱️</span>
-                    <p>Esta vaga ficará reservada por <strong>29 minutos</strong>. Se não for confirmada no app após 30 minutos, será excluída automaticamente.</p>
+            {/* DUPLICITY ERROR */}
+            {duplicityError && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex gap-3 items-start animate-pulse">
+                    <AlertIcon className="w-5 h-5 mt-0.5 shrink-0" />
+                    <span className="text-xs font-medium leading-relaxed">{duplicityError}</span>
                 </div>
             )}
-
-            {tipoAgendamento === 'INCIDENTE' && (
-                <div className="bg-rose-50 text-rose-800 text-xs p-3 rounded-lg border border-rose-100 flex gap-2 items-start animate-fade-in">
-                    <span className="text-lg">🚨</span>
-                    <div>
-                        <p className="font-bold mb-0.5">Relato de Interferência</p>
-                        <p>Primeiro verifique se houve equipe no local. O endereço específico ajudará a cruzar com o GPS da equipe da região.</p>
-                    </div>
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 gap-4">
+            
+            {/* BASIC INFO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Nome do Cliente</label>
-                  <input
-                    type="text"
-                    required
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                    placeholder="Nome completo do cliente"
-                    className={`${inputClass} focus:ring-${themeClass}-500`}
-                  />
+                    <label className={labelClass}>Nome do Cliente</label>
+                    <input 
+                        required 
+                        type="text" 
+                        value={nome} 
+                        onChange={(e) => setNome(e.target.value)} 
+                        className={inputClass} 
+                        placeholder="Ex: João da Silva"
+                    />
+                </div>
+                <div>
+                    <label className={labelClass}>Telefone</label>
+                    <input 
+                        required 
+                        type="tel" 
+                        value={telefone} 
+                        onChange={handlePhoneChange} 
+                        className={inputClass} 
+                        placeholder="(11) 99999-9999"
+                    />
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Telefone</label>
-                <input
-                  type="tel"
-                  required
-                  value={telefone}
-                  onChange={handlePhoneChange}
-                  placeholder="(00) 0000-0000"
-                  maxLength={15}
-                  className={`${inputClass} focus:ring-${themeClass}-500`}
-                />
-              </div>
-
-              {/* SELETOR DE CIDADE MELHORADO (CUSTOM COMBOBOX) */}
-              <div ref={cityWrapperRef} className="relative">
+            {/* CITY & WEATHER */}
+            <div className="relative" ref={cityWrapperRef}>
                 <label className={labelClass}>Cidade</label>
                 <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={cidade}
-                    onClick={() => setShowCityDropdown(true)}
-                    onFocus={() => setShowCityDropdown(true)}
-                    onChange={(e) => {
-                        setCidade(e.target.value);
-                        setShowCityDropdown(true);
-                        setCityError(null);
-                    }}
-                    placeholder="Selecione ou busque..."
-                    className={`${inputClass} focus:ring-${themeClass}-500 pr-10 ${cityError ? 'border-rose-500 ring-1 ring-rose-500' : ''}`}
-                    autoComplete="off"
-                  />
-                  <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-400">
-                    <div className="transform rotate-90">
-                        <ChevronRightIcon className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Custom Dropdown List */}
-                {showCityDropdown && (
-                    <ul className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-xl max-h-60 overflow-y-auto animate-fade-in-up">
-                        {filteredCities.length > 0 ? (
-                            filteredCities.map((city) => (
-                                <li 
-                                    key={city}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault(); // Prevents blur before click
-                                        setCidade(city);
-                                        setShowCityDropdown(false);
-                                        setCityError(null);
-                                    }}
-                                    className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer text-sm text-slate-700 border-b border-slate-50 last:border-0 flex items-center justify-between group"
-                                >
-                                    {city}
-                                    {normalizeText(city) === normalizeText(cidade) && <span className="text-emerald-500 font-bold text-xs">✓</span>}
-                                </li>
-                            ))
-                        ) : (
-                            <li className="px-4 py-3 text-xs text-slate-400 text-center italic">
-                                Nenhuma cidade encontrada.
-                            </li>
-                        )}
-                    </ul>
-                )}
-
-                {cityError && <p className="text-rose-500 text-[10px] font-bold mt-1 ml-1 animate-fade-in">{cityError}</p>}
-              </div>
-            </div>
-
-            {/* Campos Específicos de Incidente */}
-            {tipoAgendamento === 'INCIDENTE' && (
-                <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-100 space-y-4 animate-fade-in-up">
-                    <h4 className="text-xs font-bold text-rose-700 uppercase tracking-wide border-b border-rose-200 pb-2 mb-2">Detalhes da Ocorrência</h4>
-                    
-                    <div>
-                        <label className={labelClass}>Endereço Completo</label>
-                        <div className="relative">
-                            <input 
-                                type="text" 
-                                required
-                                className={`${inputClass} focus:ring-rose-500 pl-9`}
-                                placeholder="Rua, Número, Bairro..."
-                                value={incidenteEndereco}
-                                onChange={(e) => setIncidenteEndereco(e.target.value)}
-                            />
-                            <div className="absolute inset-y-0 left-0 flex items-center px-3 pointer-events-none text-rose-400">
-                                <MapPinIcon className="w-4 h-4" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <label className="flex items-center gap-3 cursor-pointer group pt-2">
-                        <input 
-                            type="checkbox" 
-                            className="w-5 h-5 text-rose-600 rounded border-gray-300 focus:ring-rose-500"
-                            checked={incidenteVisivel}
-                            onChange={(e) => setIncidenteVisivel(e.target.checked)}
-                        />
-                        <span className="text-sm font-medium text-slate-700 group-hover:text-rose-700 transition-colors">Cliente viu técnicos no poste?</span>
-                    </label>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className={labelClass}>Horário Avistado (Aprox)</label>
-                            <input 
-                                type="time" 
-                                className={`${inputClass} focus:ring-rose-500`}
-                                value={incidenteHora}
-                                onChange={(e) => setIncidenteHora(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label className={labelClass}>Descrição (Carro/Uniforme)</label>
-                            <input 
-                                type="text" 
-                                className={`${inputClass} focus:ring-rose-500`}
-                                placeholder="Ex: Escada amarela, carro branco..."
-                                value={incidenteDesc}
-                                onChange={(e) => setIncidenteDesc(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {tipoAgendamento !== 'INCIDENTE' && (
-                <div>
-                    <label className={labelClass}>Tipo de Atividade</label>
-                    <div className="relative">
-                        <select
-                        required
-                        value={atividade}
-                        onChange={(e) => setAtividade(e.target.value)}
-                        className={`${inputClass} appearance-none`}
-                        >
-                        <option value="">Selecione a atividade...</option>
-                        {availableActivities.map(ativ => <option key={ativ} value={ativ}>{ativ}</option>)}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-500">
-                            <div className="transform rotate-90"><ChevronRightIcon className="w-4 h-4" /></div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Data da Ocorrência / Visita</label>
-                <div className="relative">
-                    <input
-                      type="date"
-                      required
-                      min={minDate}
-                      value={data}
-                      onChange={(e) => setData(e.target.value)}
-                      className={`${inputClass} focus:ring-${themeClass}-500`}
+                    <input 
+                        required 
+                        type="text" 
+                        value={cidade} 
+                        onChange={(e) => {
+                            setCidade(e.target.value);
+                            setShowCityDropdown(true);
+                            setCityError(null);
+                        }} 
+                        onFocus={() => setShowCityDropdown(true)}
+                        className={`${inputClass} pl-10 ${cityError ? 'ring-2 ring-rose-300 bg-rose-50' : ''}`}
+                        placeholder="Digite para buscar..."
                     />
-                     <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-500">
-                        <CalendarIcon className="w-4 h-4" />
+                    <div className="absolute left-3 top-3 text-slate-400">
+                        <MapPinIcon className="w-4 h-4" />
                     </div>
                 </div>
-              </div>
-
-              {tipoAgendamento !== 'INCIDENTE' && (
-              <div>
-                <label className={labelClass}>Período</label>
-                 <div className="relative">
-                    <select
-                        required
-                        value={periodo}
-                        onChange={(e) => setPeriodo(e.target.value as Periodo)}
-                        className={`${inputClass} appearance-none focus:ring-${themeClass}-500`}
-                        disabled={!data || availablePeriods.length === 0}
-                    >
-                        {availablePeriods.map(p => <option key={p} value={p}>{p}</option>)}
-                        {data && availablePeriods.length === 0 && <option value="">Sem vagas nesta data</option>}
-                        {!data && <option value="">Selecione a data primeiro</option>}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-500">
-                         <div className="transform rotate-90"><ChevronRightIcon className="w-4 h-4" /></div>
+                {cityError && <p className="text-[10px] text-rose-500 font-bold mt-1 ml-1">{cityError}</p>}
+                
+                {showCityDropdown && filteredCities.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                        {filteredCities.map(city => (
+                            <div 
+                                key={city} 
+                                className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                onClick={() => {
+                                    setCidade(city);
+                                    setShowCityDropdown(false);
+                                    setCityError(null);
+                                }}
+                            >
+                                {city}
+                            </div>
+                        ))}
                     </div>
-                 </div>
-              </div>
-              )}
+                )}
             </div>
 
-            {/* WIDGET CLIMA CONTEXTUAL NO FORMULÁRIO */}
-            {weather && cidade && data && (
-                <div className={`mt-2 p-3 rounded-xl border flex items-center gap-4 animate-fade-in ${
-                    weather.operationalImpact === 'Alto' ? 'bg-violet-50 border-violet-200' :
-                    weather.operationalImpact === 'Médio' ? 'bg-blue-50 border-blue-200' :
-                    'bg-orange-50 border-orange-200'
-                }`}>
-                    <div className="shrink-0 p-1.5 bg-white/50 rounded-full shadow-sm">
-                        {getWeatherIcon(weather.condition)}
-                    </div>
-                    <div className="flex-1">
-                        <div className="flex justify-between items-start">
-                             <h4 className={`text-xs font-bold uppercase tracking-wide ${
-                                weather.operationalImpact === 'Alto' ? 'text-violet-700' :
-                                weather.operationalImpact === 'Médio' ? 'text-blue-700' :
-                                'text-orange-700'
-                            }`}>
-                                Previsão: {weather.condition}
-                             </h4>
-                             <span className="text-sm font-bold text-slate-700">{weather.temperature}°C</span>
+             {/* WEATHER WIDGET */}
+            {weather && (
+                <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-blue-100 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="bg-white p-2 rounded-full shadow-sm">
+                            {getWeatherIcon(weather.condition)}
                         </div>
-                        <p className="text-xs text-slate-600 leading-tight mt-0.5">
-                            Vento: {weather.windSpeed}km/h • Umidade: {weather.humidity}%
-                        </p>
-                        
-                        {(weather.operationalImpact === 'Alto' || weather.operationalImpact === 'Médio') && (
-                            <div className="mt-2 flex items-start gap-1.5 bg-white/60 p-2 rounded-lg">
-                                <AlertIcon className={`w-3.5 h-3.5 mt-0.5 ${weather.operationalImpact === 'Alto' ? 'text-violet-600' : 'text-blue-600'}`} />
-                                <span className={`text-[10px] font-bold leading-tight ${weather.operationalImpact === 'Alto' ? 'text-violet-800' : 'text-blue-800'}`}>
-                                    {weather.operationalImpact === 'Alto' 
-                                        ? 'ALERTA: Risco alto de cancelamento para serviços externos (postes).' 
-                                        : 'Atenção: Chuva pode dificultar instalação externa.'}
-                                </span>
+                        <div>
+                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide">Previsão do Tempo</div>
+                            <div className="text-lg font-bold text-slate-800">{weather.condition} • {weather.temperature}°C</div>
+                            <div className="text-[10px] text-slate-500">
+                                Vento: {weather.windSpeed}km/h • Umidade: {weather.humidity}%
                             </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {duplicityError && (
-                <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl shadow-md flex items-start gap-3 animate-fade-in my-4 ring-1 ring-rose-200">
-                    <div className="bg-rose-100 p-2 rounded-full text-rose-600 shrink-0">
-                        <AlertIcon className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <h4 className="font-bold text-rose-800 text-sm mb-1 uppercase tracking-wide">Duplicidade Detectada</h4>
-                        <p className="text-rose-700 text-xs leading-relaxed font-medium">{duplicityError}</p>
-                    </div>
-                </div>
-            )}
-
-            {tipoAgendamento !== 'INCIDENTE' && (
-                <div>
-                    <label className={labelClass}>Técnico Disponível</label>
-                    {availableTechs.length > 0 ? (
-                        <div className="grid grid-cols-1 gap-2">
-                            {availableTechs.map(tech => (
-                                <label key={tech.id} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${tecnicoId === tech.id ? `bg-${themeClass}-50 border-${themeClass}-500 ring-1 ring-${themeClass}-500` : `bg-white border-slate-200 hover:border-${themeClass}-200 hover:bg-slate-50`}`}>
-                                    <div className="flex items-center gap-3">
-                                        <input 
-                                            type="radio" 
-                                            name="tecnico" 
-                                            value={tech.id} 
-                                            checked={tecnicoId === tech.id}
-                                            onChange={(e) => setTecnicoId(e.target.value)}
-                                            className={`w-4 h-4 text-${themeClass}-600 focus:ring-${themeClass}-500 border-gray-300`}
-                                        />
-                                        <div>
-                                            <div className="font-bold text-slate-700 text-sm">{tech.nome}</div>
-                                            <div className="text-[10px] text-slate-500 uppercase tracking-wide">
-                                                {tech.cidades.slice(0, 3).join(', ')}{tech.cidades.length > 3 ? '...' : ''}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className={`font-bold text-${themeClass}-600 text-sm`}>{tech.vagasRestantes} vagas</div>
-                                    </div>
-                                </label>
-                            ))}
                         </div>
-                    ) : (
-                        <div className="text-center p-6 bg-slate-50 border border-slate-100 rounded-xl text-slate-400 text-sm">
-                            {cidade && data && availablePeriods.includes(periodo) ? 'Nenhum técnico com vagas disponíveis.' : 'Selecione cidade, data e período para ver técnicos.'}
+                    </div>
+                    {weather.operationalImpact !== 'Baixo' && (
+                        <div className={`px-3 py-1 rounded-lg text-xs font-bold border ${
+                            weather.operationalImpact === 'Alto' ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-amber-100 text-amber-700 border-amber-200'
+                        }`}>
+                            Risco {weather.operationalImpact}
                         </div>
                     )}
                 </div>
             )}
 
-            <div>
-              <label className={labelClass}>Observações Adicionais</label>
-              <textarea
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-                placeholder={tipoAgendamento === 'INCIDENTE' ? "Detalhes extras sobre a queda de sinal..." : "Ex: Ligar antes de ir, cliente só está em casa após as 14h..."}
-                className={`${inputClass} min-h-[80px] resize-none focus:ring-${themeClass}-500`}
-              />
+            {/* DATE & PERIOD */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label className={labelClass}>Data da Visita</label>
+                    <input 
+                        required 
+                        type="date" 
+                        min={minDate}
+                        value={data} 
+                        onChange={(e) => setData(e.target.value)} 
+                        className={inputClass}
+                    />
+                </div>
+                <div>
+                    <label className={labelClass}>Período</label>
+                    <div className="relative">
+                        <select 
+                            value={periodo} 
+                            onChange={(e) => setPeriodo(e.target.value as Periodo)} 
+                            className={`${inputClass} appearance-none cursor-pointer`}
+                            disabled={!data || !cidade}
+                        >
+                            {availablePeriods.map(p => <option key={p} value={p}>{p}</option>)}
+                            {availablePeriods.length === 0 && <option disabled>Indisponível</option>}
+                        </select>
+                         <div className="absolute right-3 top-3 pointer-events-none text-slate-500">
+                             <ChevronRightIcon className="w-4 h-4 rotate-90" />
+                         </div>
+                    </div>
+                </div>
             </div>
 
-            <div className="pt-2">
-                {tipoAgendamento === 'INCIDENTE' ? (
-                    <div className="space-y-3">
-                        {verificationResult === 'idle' && (
-                            <button
-                                type="button"
-                                onClick={handleVerifyPresence}
-                                className="w-full py-3.5 rounded-xl font-bold text-white shadow-lg bg-slate-800 hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
-                            >
-                                <SparklesIcon className="w-5 h-5" />
-                                Verificar Presença Técnica
-                            </button>
-                        )}
+            {/* INCIDENT REPORT FIELDS */}
+            {tipoAgendamento === 'INCIDENTE' && (
+                <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 space-y-4 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                         <h4 className="text-sm font-bold text-rose-800 flex items-center gap-2">
+                             <AlertIcon className="w-4 h-4" /> Detalhes do Incidente
+                         </h4>
+                    </div>
 
-                        {verificationResult === 'checking' && (
-                            <button disabled className="w-full py-3.5 rounded-xl font-bold text-white bg-slate-400 cursor-wait flex items-center justify-center gap-2">
-                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Consultando Escala...
-                            </button>
-                        )}
+                    <div className="grid grid-cols-2 gap-4">
+                        <label className="flex items-center gap-2 p-3 bg-white rounded-lg border border-rose-200 cursor-pointer shadow-sm">
+                            <input 
+                                type="checkbox" 
+                                checked={incidenteVisivel}
+                                onChange={(e) => setIncidenteVisivel(e.target.checked)}
+                                className="w-4 h-4 text-rose-600 rounded border-gray-300 focus:ring-rose-500"
+                            />
+                            <span className="text-xs font-bold text-rose-700">Técnico Visto no Poste?</span>
+                        </label>
+                        <div>
+                            <input 
+                                type="time" 
+                                className={`${inputClass} border-rose-200 text-rose-800 focus:ring-rose-500`}
+                                value={incidenteHora}
+                                onChange={(e) => setIncidenteHora(e.target.value)}
+                                placeholder="Horário"
+                            />
+                        </div>
+                    </div>
 
-                        {verificationResult === 'found' && (
-                            <div className="animate-fade-in-up">
-                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-3">
-                                    <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2 mb-1">
-                                        <span className="text-lg">✅</span> Equipe Confirmada
-                                    </h4>
-                                    <p className="text-xs text-emerald-700">
-                                        Os seguintes técnicos trabalharam em <strong>{cidade}</strong> nesta data:
-                                    </p>
-                                    <ul className="mt-2 text-xs font-bold text-slate-700 bg-white/50 p-2 rounded border border-emerald-100">
-                                        {verifiedTechs.map(t => <li key={t}>• {t}</li>)}
-                                    </ul>
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="w-full py-3.5 rounded-xl font-bold text-white shadow-lg bg-emerald-600 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+                    <div>
+                        <label className={`${labelClass} text-rose-700`}>Endereço Completo</label>
+                        <input 
+                             type="text"
+                             className={`${inputClass} border-rose-200 focus:ring-rose-500`}
+                             value={incidenteEndereco}
+                             onChange={(e) => setIncidenteEndereco(e.target.value)}
+                             placeholder="Rua, Número, Bairro, Referência..."
+                        />
+                    </div>
+
+                    <div>
+                        <label className={`${labelClass} text-rose-700`}>Descrição do Técnico/Veículo</label>
+                        <textarea 
+                            className={`${inputClass} border-rose-200 focus:ring-rose-500 h-20 resize-none`}
+                            value={incidenteDesc}
+                            onChange={(e) => setIncidenteDesc(e.target.value)}
+                            placeholder="Ex: Carro branco com escada amarela, técnico sem uniforme..."
+                        />
+                    </div>
+
+                    <div className="pt-2 border-t border-rose-200/50">
+                        <div className="flex justify-between items-center mb-2">
+                             <span className="text-xs font-bold text-rose-800">Verificação de Escala</span>
+                             {verificationResult === 'checking' && <span className="text-xs text-rose-500 animate-pulse">Verificando...</span>}
+                             {verificationResult === 'found' && <span className="text-xs font-bold text-rose-600 bg-rose-100 px-2 py-0.5 rounded">⚠️ Técnico Identificado na Área</span>}
+                             {verificationResult === 'not_found' && <span className="text-xs font-bold text-slate-500">Nenhum técnico oficial agendado</span>}
+                        </div>
+                        <button 
+                            type="button"
+                            onClick={handleVerifyPresence}
+                            className="w-full py-2 bg-white border border-rose-300 text-rose-700 font-bold rounded-lg hover:bg-rose-100 transition text-xs shadow-sm"
+                        >
+                            Verificar Presença Autorizada
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* STANDARD ACTIVITY SELECTOR */}
+            {tipoAgendamento !== 'INCIDENTE' && (
+                <div>
+                    <label className={labelClass}>Tipo de Atividade</label>
+                    <div className="relative">
+                        <select 
+                            required 
+                            value={atividade} 
+                            onChange={(e) => setAtividade(e.target.value)} 
+                            className={`${inputClass} appearance-none cursor-pointer`}
+                        >
+                            <option value="">Selecione...</option>
+                            {availableActivities.map(act => <option key={act} value={act}>{act}</option>)}
+                        </select>
+                        <div className="absolute right-3 top-3 pointer-events-none text-slate-500">
+                             <ChevronRightIcon className="w-4 h-4 rotate-90" />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* TECHNICIAN SELECTOR */}
+            {tipoAgendamento !== 'INCIDENTE' && (
+                <div>
+                    <div className="flex justify-between items-end mb-2">
+                        <label className={labelClass}>Técnicos Disponíveis</label>
+                        {totalVagasGeral > 0 && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{totalVagasGeral} vagas na região</span>}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                        {availableTechs.length > 0 ? (
+                            availableTechs.map((tech) => (
+                                <label 
+                                    key={tech.id} 
+                                    className={`relative flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all duration-200 group ${
+                                        tecnicoId === tech.id 
+                                        ? 'border-indigo-500 bg-indigo-50/50 shadow-sm' 
+                                        : 'border-slate-100 bg-white hover:border-indigo-100 hover:bg-slate-50'
+                                    }`}
                                 >
-                                    <AlertIcon className="w-5 h-5" />
-                                    Abrir Chamado de Averiguação
-                                </button>
-                            </div>
-                        )}
-
-                        {verificationResult === 'not_found' && (
-                            <div className="animate-fade-in-up">
-                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
-                                    <h4 className="text-sm font-bold text-amber-800 flex items-center gap-2 mb-1">
-                                        <span className="text-lg">⚠️</span> Nenhum Registro Encontrado
-                                    </h4>
-                                    <p className="text-xs text-amber-700 leading-relaxed">
-                                        Não consta nenhum técnico da nossa empresa trabalhando em <strong>{cidade}</strong> nesta data.
-                                        <br/><br/>
-                                        <strong>Possibilidade:</strong> Manutenção de terceiros ou outra operadora.
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setVerificationResult('idle')}
-                                        className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all text-xs"
-                                    >
-                                        Voltar
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        className="flex-1 py-3 rounded-xl font-bold text-white shadow bg-rose-600 hover:bg-rose-700 transition-all text-xs"
-                                    >
-                                        Forçar Registro
-                                    </button>
-                                </div>
+                                    <input 
+                                        type="radio" 
+                                        name="tecnico" 
+                                        value={tech.id} 
+                                        checked={tecnicoId === tech.id} 
+                                        onChange={(e) => setTecnicoId(e.target.value)} 
+                                        className="sr-only"
+                                    />
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${tecnicoId === tech.id ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                            {tech.nome.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <span className={`block text-sm font-bold ${tecnicoId === tech.id ? 'text-indigo-900' : 'text-slate-700'}`}>{tech.nome}</span>
+                                            <span className="text-[10px] text-slate-400">
+                                                {tech.vagasRestantes === 1 ? 'Última vaga!' : `${tech.vagasRestantes} vagas livres`}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {tecnicoId === tech.id && <div className="w-3 h-3 rounded-full bg-indigo-500 shadow-lg shadow-indigo-300/50"></div>}
+                                </label>
+                            ))
+                        ) : (
+                            <div className="p-4 text-center border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs">
+                                {(!cidade || !data) ? 'Selecione cidade e data primeiro.' : 'Nenhum técnico disponível para este período.'}
                             </div>
                         )}
                     </div>
-                ) : (
-                    <button
-                        type="submit"
-                        disabled={isSubmitting || !tecnicoId || !!duplicityError || !!cityError}
-                        className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 ${
-                            isSubmitting || !tecnicoId || !!duplicityError || !!cityError
-                            ? 'bg-slate-300 cursor-not-allowed shadow-none' 
-                            : tipoAgendamento === 'PRE_AGENDAMENTO'
-                                ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-amber-200'
-                                : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 shadow-indigo-200'
-                        }`}
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                <span>Processando...</span>
-                            </>
-                        ) : (
-                            <>
-                                <SaveIcon className="w-5 h-5" />
-                                <span>{tipoAgendamento === 'PRE_AGENDAMENTO' ? 'Reservar Vaga' : 'Confirmar Agendamento'}</span>
-                            </>
-                        )}
-                    </button>
-                )}
+                </div>
+            )}
+
+            {/* OBSERVATIONS */}
+            <div>
+                <label className={labelClass}>Observações {tipoAgendamento === 'INCIDENTE' ? 'Adicionais' : '(Opcional)'}</label>
+                <textarea 
+                    value={observacao} 
+                    onChange={(e) => setObservacao(e.target.value)} 
+                    className={`${inputClass} resize-none h-20`}
+                    placeholder="Instruções de acesso, referências, etc."
+                />
             </div>
 
+            <button 
+                type="submit" 
+                disabled={isSubmitting || (tipoAgendamento !== 'INCIDENTE' && !tecnicoId)}
+                className={`w-full py-3.5 rounded-xl text-white font-bold text-sm shadow-lg transform active:scale-95 transition-all flex items-center justify-center gap-2 ${
+                    isSubmitting 
+                    ? 'bg-slate-400 cursor-wait' 
+                    : (tipoAgendamento !== 'INCIDENTE' && !tecnicoId)
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                        : `bg-${themeClass}-600 hover:bg-${themeClass}-700 shadow-${themeClass}-200 hover:-translate-y-1`
+                }`}
+            >
+                {isSubmitting ? 'Processando...' : (
+                    <>
+                        <SaveIcon className="w-4 h-4" />
+                        {tipoAgendamento === 'PRE_AGENDAMENTO' ? 'Reservar Vaga (30min)' : (tipoAgendamento === 'INCIDENTE' ? 'Registrar Ocorrência' : 'Confirmar Agendamento')}
+                    </>
+                )}
+            </button>
           </form>
         )}
       </div>
