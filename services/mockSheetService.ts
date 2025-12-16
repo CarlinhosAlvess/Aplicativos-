@@ -384,33 +384,45 @@ export const getAvailableTechnicians = (cidade: string, dataStr: string, periodo
 
   return cityTechs.map(tech => {
     let capacity = 0;
-    let appointmentsCount = 0;
-
+    
+    // REGRA DE CAPACIDADE POR PERÍODO (SOLICITADO)
     if (isHoliday) {
-        // Capacidade Total do dia (independente de periodo)
         capacity = Number(tech.capacidadeFeriado ?? 0);
-        // Conta todos os agendamentos do dia para este técnico
-        appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else if (isSaturday) {
-        // Capacidade Total do Sábado (independente de periodo)
         capacity = Number(tech.capacidadeSabado ?? 0);
-        appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else if (isSunday) {
-        // Capacidade Total do Domingo (independente de periodo)
         capacity = Number(tech.capacidadeDomingo ?? 0);
-        appointmentsCount = db.agendamentos.filter(a => a.tecnicoId === tech.id && a.data === dataStr).length;
     } else {
-        // Dia de semana comum: Capacidade por Período
+        // Dia de semana comum: Busca capacidade específica da coluna
         if (periodo === Periodo.MANHA) capacity = Number(tech.capacidadeManha);
         else if (periodo === Periodo.TARDE) capacity = Number(tech.capacidadeTarde);
         else if (periodo === Periodo.NOITE) capacity = Number(tech.capacidadeNoite ?? 0);
-
-        appointmentsCount = db.agendamentos.filter(a => 
-            a.tecnicoId === tech.id && a.data === dataStr && a.periodo === periodo
-        ).length;
     }
     
-    const vagasRestantes = Math.max(0, capacity - appointmentsCount);
+    // Conta quantos agendamentos já existem para este técnico, nesta data e período
+    const appointmentsCount = db.agendamentos.filter(a => 
+        a.tecnicoId === tech.id && 
+        a.data === dataStr && 
+        a.periodo === periodo && // Filtra pelo mesmo período
+        a.status !== 'Encerrado' // Não conta cancelados
+    ).length;
+
+    // Se for Feriado/Fim de semana, a capacidade é diária, mas contamos agendamentos do dia todo?
+    // Não, se o técnico atende de manhã no sábado, conta 1 vaga. Se a capacidadeSábado é 3, sobram 2.
+    // O BookingForm permite selecionar Período mesmo no sábado.
+    // Então aqui comparamos a Capacidade Total do Dia (ex: Sáb=3) contra Agendamentos do Dia.
+    let usedSlots = appointmentsCount;
+    
+    if (isSaturday || isSunday || isHoliday) {
+        // Nos dias especiais, a capacidade é global, então subtraímos todos os agendamentos do dia
+        usedSlots = db.agendamentos.filter(a => 
+            a.tecnicoId === tech.id && 
+            a.data === dataStr && 
+            a.status !== 'Encerrado'
+        ).length;
+    }
+
+    const vagasRestantes = Math.max(0, capacity - usedSlots);
 
     return {
       ...tech,
@@ -423,26 +435,36 @@ export const getAvailablePeriods = (cidade: string, dataStr: string): Periodo[] 
     if (!cidade || !dataStr) return [];
     const today = new Date();
     const [year, month, day] = dataStr.split('-').map(Number);
+    
     const selectedDate = new Date(year, month - 1, day);
-    
-    const isToday = selectedDate.getDate() === today.getDate() &&
-                    selectedDate.getMonth() === today.getMonth() &&
-                    selectedDate.getFullYear() === today.getFullYear();
-    
-    if (isToday) {
-        const currentHour = today.getHours();
-        if (currentHour >= 16) {
-            return []; 
-        }
+    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const selectedZero = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+
+    const isToday = selectedZero.getTime() === todayZero.getTime();
+    const currentHour = today.getHours();
+
+    // REGRA 1: Dia encerra às 16:00
+    if (isToday && currentHour >= 16) {
+        return []; 
     }
 
     const allPeriods = [Periodo.MANHA, Periodo.TARDE, Periodo.NOITE];
+    
     return allPeriods.filter(p => {
+        // REGRA 2: Filtro de Horário por Período (apenas se for hoje)
         if (isToday) {
-            const currentHour = today.getHours();
-            if (p === Periodo.MANHA && currentHour >= 12) return false;
+            // Manhã fecha às 11:00 (para dar tempo de chegar/almoçar)
+            if (p === Periodo.MANHA && currentHour >= 11) return false;
+            
+            // Tarde fecha às 16:00 (redundante com a regra global, mas seguro)
+            if (p === Periodo.TARDE && currentHour >= 16) return false;
         }
+        
+        // REGRA 3: Capacidade Ocupada por Inteiro
+        // Se a lista de técnicos disponíveis for vazia (vagasRestantes == 0 para todos),
+        // então o período é removido da lista.
         const techs = getAvailableTechnicians(cidade, dataStr, p);
+        
         return techs.length > 0;
     });
 };

@@ -442,7 +442,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
   };
 
   return (
-    <div className={`bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden max-w-4xl mx-auto relative`}>
+    <div className={`bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden w-full relative`}>
       <div className={`absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-${themeClass}-500 to-${themeClass === 'rose' ? 'red' : (themeClass === 'amber' ? 'orange' : 'violet')}-500 transition-colors duration-500`}></div>
 
       <div className="p-4 sm:p-10">
@@ -546,8 +546,8 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
             )}
             
             {/* BASIC INFO */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="lg:col-span-2">
                     <label className={labelClass}>Nome do Cliente</label>
                     <input 
                         required 
@@ -558,7 +558,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
                         placeholder="Ex: João da Silva"
                     />
                 </div>
-                <div>
+                <div className="lg:col-span-2">
                     <label className={labelClass}>Telefone</label>
                     <input 
                         required 
@@ -640,8 +640,8 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
             )}
 
             {/* DATE & PERIOD */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="lg:col-span-2">
                     <label className={labelClass}>Data da Visita</label>
                     <input 
                         required 
@@ -652,7 +652,7 @@ const BookingForm = ({ currentUser }: BookingFormProps) => {
                         className={inputClass}
                     />
                 </div>
-                <div>
+                <div className="lg:col-span-2">
                     <label className={labelClass}>Período</label>
                     <div className="relative">
                         <select 
