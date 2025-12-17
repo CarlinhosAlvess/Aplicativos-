@@ -544,63 +544,63 @@ function App() {
           </div>
       )}
 
-      {/* Navbar Clean & Modern */}
+      {/* Navbar Clean & Modern - REDUCED HEIGHT */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300">
-        <div className="w-full px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 sm:h-20 items-center">
+        <div className="w-full px-2 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-14 sm:h-16 items-center">
             
-            {/* Logo Section */}
-            <div className="flex items-center gap-3 shrink-0">
-              <BrayoLogo className="w-10 h-10 sm:w-12 sm:h-12 shadow-sm rounded-full" />
+            {/* Logo Section - SLIGHTLY SMALLER */}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <BrayoLogo className="w-8 h-8 sm:w-10 sm:h-10 shadow-sm rounded-full" />
               <div className="flex flex-col justify-center">
-                <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 leading-none">
+                <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 leading-none">
                   Brayo
                 </span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500 leading-none mt-0.5">
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-indigo-500 leading-none mt-0.5">
                     Gestão
                 </span>
               </div>
             </div>
             
-            {/* Navigation Buttons */}
+            {/* Navigation Buttons - COMPACT */}
             <div className="flex items-center gap-1 sm:gap-2">
-              <div className="hidden md:flex flex-col items-end mr-4 border-r border-slate-100 pr-4">
+              <div className="hidden md:flex flex-col items-end mr-3 border-r border-slate-100 pr-3">
                  <span className="text-xs font-bold text-slate-700">{currentUser.nome}</span>
-                 <span className="text-[10px] text-slate-400 uppercase">{isAdmin ? 'Administrador' : 'Usuário'}</span>
+                 <span className="text-[10px] text-slate-400 uppercase">{isAdmin ? 'Admin' : 'User'}</span>
               </div>
 
               <button
                 onClick={() => perms.agendamento && handleViewChange('form')}
                 disabled={!perms.agendamento}
-                className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                   !perms.agendamento ? 'opacity-30 cursor-not-allowed hidden' : 
                   view === 'form' 
                   ? 'bg-slate-900 text-white shadow-md shadow-slate-200' 
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
-                <EditIcon className="w-5 h-5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Agendamento</span>
+                <EditIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">Agenda</span>
               </button>
 
               <button
                 onClick={() => perms.dashboard && handleViewChange('dashboard')}
                 disabled={!perms.dashboard}
-                className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                   !perms.dashboard ? 'opacity-30 cursor-not-allowed hidden' :
                   view === 'dashboard' 
                   ? 'bg-slate-900 text-white shadow-md shadow-slate-200' 
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
-                <ChartIcon className="w-5 h-5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Dashboard</span>
+                <ChartIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">Dash</span>
               </button>
 
               <button
                 onClick={() => perms.planilha && handleViewChange('sheet')}
                 disabled={!perms.planilha}
-                className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                     !perms.planilha 
                     ? 'opacity-50 cursor-not-allowed text-slate-400'
                     : view === 'sheet' 
@@ -609,43 +609,43 @@ function App() {
                 }`}
                 title={!perms.planilha ? "Acesso restrito" : "Planilha"}
               >
-                {!perms.planilha ? <LockIcon className="w-4 h-4" /> : <TableIcon className="w-5 h-5 sm:w-4 sm:h-4" />}
+                {!perms.planilha ? <LockIcon className="w-3 h-3" /> : <TableIcon className="w-4 h-4" />}
                 <span className="hidden sm:inline">Planilha</span>
               </button>
 
               <button 
                 onClick={handleLogout}
-                className="ml-1 p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                className="ml-1 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
                 title="Sair"
               >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
               </button>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Main Content */}
-      <main className="w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+      {/* Main Content - REDUCED PADDING */}
+      <main className="w-full px-2 sm:px-6 lg:px-8 py-3 sm:py-6">
         <div className={`transition-all duration-300 ease-in-out transform ${isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
             {view === 'form' && perms.agendamento && (
             <div>
-                <div className="text-center mb-6 sm:mb-8">
-                <h1 className="text-xl sm:text-4xl font-extrabold text-slate-800 tracking-tight">
+                <div className="text-center mb-4 sm:mb-6">
+                <h1 className="text-lg sm:text-2xl font-extrabold text-slate-800 tracking-tight">
                     Novo Agendamento
                 </h1>
-                <p className="text-slate-500 text-sm mt-2">Preencha os dados abaixo para reservar uma visita técnica.</p>
+                <p className="text-slate-500 text-xs mt-1">Preencha os dados abaixo para reservar uma visita técnica.</p>
                 </div>
                 <BookingForm currentUser={currentUser} />
             </div>
             )}
 
             {view === 'sheet' && perms.planilha && (
-            <div className="h-[calc(100vh-140px)] sm:h-auto">
-                <div className="mb-4 sm:mb-8 flex items-center justify-between">
+            <div className="h-[calc(100vh-100px)] sm:h-auto">
+                <div className="mb-2 sm:mb-4 flex items-center justify-between">
                     <div>
-                        <h1 className="text-xl sm:text-3xl font-bold text-slate-800 tracking-tight">Base de Dados</h1>
-                        <p className="text-slate-500 mt-1 text-xs sm:text-base hidden sm:block">Gerenciamento centralizado de técnicos e recursos.</p>
+                        <h1 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">Base de Dados</h1>
+                        <p className="text-slate-500 mt-0.5 text-[10px] sm:text-xs hidden sm:block">Gerenciamento centralizado de técnicos e recursos.</p>
                     </div>
                 </div>
                 <SheetEditor 
