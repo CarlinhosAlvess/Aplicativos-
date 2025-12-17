@@ -239,6 +239,14 @@ export const saveSheetData = (data: DatabaseSchema) => {
   }
 };
 
+export const resetDatabase = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    // Remove também configurações de nuvem para evitar sincronização imediata de dados ruins
+    localStorage.removeItem('app_cloud_url');
+    localStorage.removeItem('app_initial_load_complete');
+    window.location.reload();
+};
+
 export const addLog = (usuario: string, acao: string, detalhes: string) => {
     const data = getSheetData();
     const newLog: LogEntry = {

@@ -5,7 +5,7 @@ import SheetEditor from './components/SheetEditor';
 import Dashboard from './components/Dashboard';
 import { TableIcon, EditIcon, ChartIcon, AlertIcon, LockIcon } from './components/Icons';
 import { loadFromCloud, saveToCloud, isValidUrl } from './services/cloudService';
-import { getSheetData, setFullData, removeAgendamento, confirmarPreAgendamento, expirePreBookings, addLog, getUniqueCities } from './services/mockSheetService';
+import { getSheetData, setFullData, removeAgendamento, confirmarPreAgendamento, expirePreBookings, addLog, getUniqueCities, resetDatabase } from './services/mockSheetService';
 import { UserProfile, UsuarioPermissoes } from './types';
 
 // --- BRANDING COMPONENT ---
@@ -258,6 +258,12 @@ function App() {
       }, 300);
   }
 
+  const handleFactoryReset = () => {
+      if (confirm("Isso irá apagar TODOS os dados locais e restaurar o usuário 'admin' / 'admin'.\n\nSe você sincronizou com a nuvem, baixe os dados novamente após o login.\n\nDeseja continuar?")) {
+          resetDatabase();
+      }
+  };
+
   const handleSync = async (url: string, forceUpload: boolean = false) => {
       if (!url) return;
       setIsSyncing(true);
@@ -491,10 +497,19 @@ function App() {
                           Acessar Plataforma
                       </button>
                   </form>
-                  <p className="mt-8 text-[10px] text-slate-400 text-center">
-                      <span className="block mb-1">Padrão: <strong className="text-slate-500">Administrador / 1234</strong></span>
-                      <span className="block">ou <strong className="text-slate-500">admin / admin</strong></span>
-                  </p>
+                  <div className="mt-8 text-center space-y-2">
+                      <p className="text-[10px] text-slate-400">
+                          <span className="block mb-1">Padrão: <strong className="text-slate-500">Administrador / 1234</strong></span>
+                          <span className="block">ou <strong className="text-slate-500">admin / admin</strong></span>
+                      </p>
+                      <button 
+                        type="button"
+                        onClick={handleFactoryReset}
+                        className="text-[10px] text-rose-400 hover:text-rose-600 underline decoration-dotted transition-colors"
+                      >
+                          Problemas no acesso? Restaurar padrão
+                      </button>
+                  </div>
                </div>
           </div>
       );
